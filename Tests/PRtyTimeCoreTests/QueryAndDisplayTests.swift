@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import PrtyCore
+@testable import PRtyTimeCore
 
 @Suite struct QueriesTests {
     @Test func combinedQueryHasEveryBucket() {

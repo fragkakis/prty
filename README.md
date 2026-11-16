@@ -1,12 +1,12 @@
 <img src="docs/icon.png" width="96" alt="">
 
-# Prty
+# PRty Time
 
 A macOS menu-bar app that lists the GitHub pull requests waiting on you, and notifies you when something happens on them. A small replacement for [Trailer](https://github.com/ptsochantaris/trailer).
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/screenshot-dark.png">
-  <img src="docs/screenshot-light.png" alt="The Prty panel, showing the To review and My PRs tabs">
+  <img src="docs/screenshot-light.png" alt="The PRty Time panel, showing the To review and My PRs tabs">
 </picture>
 
 ## Features
@@ -30,27 +30,27 @@ Your own actions are ignored, including your own merges unless auto-merge did th
 ## Requirements
 
 - macOS 15 or later, Apple Silicon or Intel
-- [GitHub CLI](https://cli.github.com), logged in with `gh auth login`. Prty reuses its token, so there's nothing else to configure.
+- [GitHub CLI](https://cli.github.com), logged in with `gh auth login`. PRty Time reuses its token, so there's nothing else to configure.
 
 ## Install
 
-Download `Prty.zip` from the [latest release](https://github.com/fragkakis/prty/releases/latest), unzip it, move `Prty.app` to Applications and open it.
+Download `PRty-Time.zip` from the [latest release](https://github.com/fragkakis/prty-time/releases/latest), unzip it, move `PRty Time.app` to Applications and open it.
 
-Prty isn't notarized by Apple, so macOS blocks the first launch with "Apple could not verify Prty…". Open System Settings → Privacy & Security and click **Open Anyway**, or run `xattr -dr com.apple.quarantine /Applications/Prty.app`. You only need to do this once per download.
+PRty Time isn't notarized by Apple, so macOS blocks the first launch with "Apple could not verify PRty Time…". Open System Settings → Privacy & Security and click **Open Anyway**, or run `xattr -dr com.apple.quarantine "/Applications/PRty Time.app"`. You only need to do this once per download.
 
 ### From source
 
 Needs the Xcode Command Line Tools (`xcode-select --install`); full Xcode isn't needed. Apps you build yourself aren't blocked.
 
 ```sh
-git clone https://github.com/fragkakis/prty.git
-cd prty
-make install   # builds, ad-hoc signs, copies to ~/Applications/Prty.app and launches it
+git clone https://github.com/fragkakis/prty-time.git
+cd prty-time
+make install   # builds, ad-hoc signs, copies to ~/Applications/PRty Time.app and launches it
 ```
 
 ### After installing
 
-Allow notifications when macOS asks. To start Prty at login, turn on *Launch at login* in Settings (⌘, in the panel).
+Allow notifications when macOS asks. To start PRty Time at login, turn on *Launch at login* in Settings (⌘, in the panel).
 
 ## Development
 
@@ -59,7 +59,7 @@ make test      # unit tests
 make run       # build and launch from .build/ without installing
 make logs      # stream poll logs (one line per poll: requests, cost, duration)
 make icon      # redraw Resources/AppIcon.icns from Scripts/icon.swift
-make zip       # universal (Apple Silicon + Intel) build, zipped to .build/Prty.zip
+make zip       # universal (Apple Silicon + Intel) build, zipped to .build/PRty-Time.zip
 ```
 
 **Releasing:** `git tag v0.2.0 && git push origin v0.2.0`. The Release workflow builds the zip on GitHub's macOS runners and publishes it as a release, with install notes from `.github/release-notes.md`.

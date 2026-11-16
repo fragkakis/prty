@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import PrtyCore
+@testable import PRtyTimeCore
 
 let now = Date(timeIntervalSince1970: 1_800_000_000)
 let me = "fragkakis"

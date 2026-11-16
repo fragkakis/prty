@@ -1,5 +1,5 @@
 import Observation
-import PrtyCore
+import PRtyTimeCore
 import ServiceManagement
 import SwiftUI
 

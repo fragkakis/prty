@@ -1,5 +1,5 @@
 import AppKit
-import PrtyCore
+import PRtyTimeCore
 import SwiftUI
 
 struct MenuBarLabel: View {
@@ -183,7 +183,7 @@ struct MenuContent: View {
                 .help("Settings (⌘,)")
             Button { NSApp.terminate(nil) } label: { Image(systemName: "power") }
                 .keyboardShortcut("q")
-                .help("Quit Prty (⌘Q)")
+                .help("Quit PRty Time (⌘Q)")
         }
         .buttonStyle(.borderless)
         .padding(.horizontal, 12)

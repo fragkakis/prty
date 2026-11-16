@@ -169,7 +169,7 @@ public actor GitHubClient {
         request.httpMethod = "POST"
         request.setValue("bearer \(try currentToken())", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("Prty", forHTTPHeaderField: "User-Agent")
+        request.setValue("PRtyTime", forHTTPHeaderField: "User-Agent")
         request.httpBody = try JSONSerialization.data(withJSONObject: ["query": query])
 
         let body: Data, response: URLResponse

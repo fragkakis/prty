@@ -1,7 +1,7 @@
 import AppKit
 import Observation
 import os
-import PrtyCore
+import PRtyTimeCore
 
 @MainActor @Observable
 final class PRStore {

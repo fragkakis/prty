@@ -11,11 +11,11 @@ let testSettings: [SwiftSetting] = FileManager.default.fileExists(atPath: testin
     : []
 
 let package = Package(
-    name: "Prty",
+    name: "PRtyTime",
     platforms: [.macOS(.v15)],
     targets: [
-        .target(name: "PrtyCore"),
-        .executableTarget(name: "Prty", dependencies: ["PrtyCore"]),
-        .testTarget(name: "PrtyCoreTests", dependencies: ["PrtyCore"], swiftSettings: testSettings),
+        .target(name: "PRtyTimeCore"),
+        .executableTarget(name: "PRtyTime", dependencies: ["PRtyTimeCore"]),
+        .testTarget(name: "PRtyTimeCoreTests", dependencies: ["PRtyTimeCore"], swiftSettings: testSettings),
     ]
 )

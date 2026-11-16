@@ -1,9 +1,9 @@
 import AppKit
-import PrtyCore
+import PRtyTimeCore
 import SwiftUI
 
 @main
-struct PrtyApp: App {
+struct PRtyTimeApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     private let store = PRStore.shared
 

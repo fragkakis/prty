@@ -6,7 +6,7 @@ public struct StateStore: Sendable {
 
     public init(url: URL? = nil) {
         self.url = url ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("Prty", isDirectory: true)
+            .appendingPathComponent("Prty", isDirectory: true) // the old app name, kept so saved state carries over
             .appendingPathComponent("state.json")
     }
 

@@ -1,5 +1,5 @@
 import AppKit
-import PrtyCore
+import PRtyTimeCore
 import UserNotifications
 
 @MainActor
