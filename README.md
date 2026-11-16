@@ -34,7 +34,13 @@ Your own actions are ignored, including your own merges unless auto-merge did th
 
 ## Install
 
-Download `PRty-Time.zip` from the [latest release](https://github.com/fragkakis/prty-time/releases/latest), unzip it, move `PRty Time.app` to Applications and open it.
+With [Homebrew](https://brew.sh), which also installs the GitHub CLI:
+
+```sh
+brew install --cask fragkakis/tap/prty-time
+```
+
+Or download `PRty-Time.zip` from the [latest release](https://github.com/fragkakis/prty-time/releases/latest), unzip it, move `PRty Time.app` to Applications and open it.
 
 PRty Time isn't notarized by Apple, so macOS blocks the first launch with "Apple could not verify PRty Time…". Open System Settings → Privacy & Security and click **Open Anyway**, or run `xattr -dr com.apple.quarantine "/Applications/PRty Time.app"`. You only need to do this once per download.
 
@@ -62,7 +68,7 @@ make icon      # redraw Resources/AppIcon.icns from Scripts/icon.swift
 make zip       # universal (Apple Silicon + Intel) build, zipped to .build/PRty-Time.zip
 ```
 
-**Releasing:** `git tag v0.2.0 && git push origin v0.2.0`. The Release workflow builds the zip on GitHub's macOS runners and publishes it as a release, with install notes from `.github/release-notes.md`.
+**Releasing:** push a tag (`git tag v0.2.0 && git push origin v0.2.0`) or publish a release with a new `v*` tag on github.com. The Release workflow builds the zip on GitHub's macOS runners, attaches it to the release (adding the install notes from `.github/release-notes.md` when it creates the release), and updates the cask in [fragkakis/homebrew-tap](https://github.com/fragkakis/homebrew-tap) using the `TAP_DEPLOY_KEY` secret.
 
 - **API usage:** one GraphQL request per poll (every 2 min by default), about 20 of the 5,000 points GitHub allows per hour, plus a 1-point lookup when a PR drops off your lists (to tell merged from closed). Polling pauses when the rate limit runs low.
 - **State:** `~/Library/Application Support/Prty/state.json` holds what was already seen, so restarts don't re-notify.
