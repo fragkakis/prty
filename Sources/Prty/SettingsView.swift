@@ -29,7 +29,8 @@ struct SettingsView: View {
                 Toggle("Merges of my PRs and PRs I review", isOn: $notifyMerged)
             }
             Section {
-                Toggle("Launch at login", isOn: Binding(get: { loginItem.isEnabled }, set: loginItem.set))
+                // A closure, not `set: loginItem.set`: passing the method crashes Swift 6.3's compiler.
+                Toggle("Launch at login", isOn: Binding(get: { loginItem.isEnabled }, set: { loginItem.set($0) }))
                 if let error = loginItem.error {
                     Text(error).font(.caption).foregroundStyle(.red)
                 }
