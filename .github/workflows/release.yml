@@ -1,0 +1,37 @@
+name: Release
+
+# Pushing a v* tag builds a universal Prty.zip and publishes it as a GitHub release.
+# Running it by hand (Actions → Release → Run workflow) only builds, as a test.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Build
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            make zip VERSION="${GITHUB_REF_NAME#v}"
+          else
+            make zip
+          fi
+          lipo -archs .build/Prty.app/Contents/MacOS/Prty
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Prty
+          path: .build/Prty.zip
+
+      - name: Publish
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" .build/Prty.zip --title "Prty $GITHUB_REF_NAME" --notes-file .github/release-notes.md --generate-notes
