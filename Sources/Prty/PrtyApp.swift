@@ -1,0 +1,53 @@
+import AppKit
+import PrtyCore
+import SwiftUI
+
+@main
+struct PrtyApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+    private let store = PRStore.shared
+
+    init() {
+        Prefs.registerDefaults()
+    }
+
+    var body: some Scene {
+        MenuBarExtra {
+            MenuContent(store: store)
+        } label: {
+            MenuBarLabel(store: store)
+        }
+        .menuBarExtraStyle(.window)
+
+        Settings {
+            SettingsView()
+        }
+    }
+}
+
+@MainActor
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        PRStore.shared.start()
+    }
+}
+
+enum Prefs {
+    static let pollMinutes = "pollMinutes"
+    static let staleDays = "staleDays"
+    static let ignoreBots = "ignoreBots"
+
+    static func notifyKey(_ category: NotificationCategory) -> String { "notify.\(category.rawValue)" }
+
+    /// Debug: treat your own comments/reviews/pushes as activity. Set with
+    /// `defaults write com.fragkakis.prty notifySelf -bool YES` or `PRTY_NOTIFY_SELF=1`.
+    static var notifySelf: Bool {
+        ProcessInfo.processInfo.environment["PRTY_NOTIFY_SELF"] == "1" || UserDefaults.standard.bool(forKey: "notifySelf")
+    }
+
+    static func registerDefaults() {
+        var defaults: [String: Any] = [pollMinutes: 2.0, staleDays: 30, ignoreBots: true]
+        for category in NotificationCategory.allCases { defaults[notifyKey(category)] = true }
+        UserDefaults.standard.register(defaults: defaults)
+    }
+}

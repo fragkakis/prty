@@ -1,0 +1,64 @@
+import Observation
+import PrtyCore
+import ServiceManagement
+import SwiftUI
+
+// No @State here: in the macOS 27 SDK it's a macro whose plugin only ships with
+// Xcode, so it doesn't build with the Command Line Tools alone.
+struct SettingsView: View {
+    @AppStorage(Prefs.pollMinutes) private var pollMinutes = 2.0
+    @AppStorage(Prefs.staleDays) private var staleDays = 30
+    @AppStorage(Prefs.ignoreBots) private var ignoreBots = true
+    @AppStorage(Prefs.notifyKey(.myPRs)) private var notifyMyPRs = true
+    @AppStorage(Prefs.notifyKey(.reviewRequests)) private var notifyRequests = true
+    @AppStorage(Prefs.notifyKey(.reviewing)) private var notifyReviewing = true
+    @AppStorage(Prefs.notifyKey(.merged)) private var notifyMerged = true
+    private let loginItem = LoginItem.shared
+
+    var body: some View {
+        Form {
+            Section("Polling") {
+                Stepper("Check every \(Int(pollMinutes)) min", value: $pollMinutes, in: 1...30, step: 1)
+                Stepper("Hide team requests idle for \(staleDays) days", value: $staleDays, in: 1...365)
+                Toggle("Ignore bots (hide their PRs, mute their comments)", isOn: $ignoreBots)
+            }
+            Section("Notify me about") {
+                Toggle("Reviews and comments on my PRs", isOn: $notifyMyPRs)
+                Toggle("New review requests", isOn: $notifyRequests)
+                Toggle("Activity on PRs I review", isOn: $notifyReviewing)
+                Toggle("Merges of my PRs and PRs I review", isOn: $notifyMerged)
+            }
+            Section {
+                Toggle("Launch at login", isOn: Binding(get: { loginItem.isEnabled }, set: loginItem.set))
+                if let error = loginItem.error {
+                    Text(error).font(.caption).foregroundStyle(.red)
+                }
+            }
+        }
+        .formStyle(.grouped)
+        .frame(width: 420)
+        .fixedSize()
+    }
+}
+
+@MainActor @Observable
+final class LoginItem {
+    static let shared = LoginItem()
+
+    private(set) var isEnabled = SMAppService.mainApp.status == .enabled
+    private(set) var error: String?
+
+    func set(_ on: Bool) {
+        do {
+            if on {
+                try SMAppService.mainApp.register()
+            } else {
+                try SMAppService.mainApp.unregister()
+            }
+            error = nil
+        } catch {
+            self.error = error.localizedDescription
+        }
+        isEnabled = SMAppService.mainApp.status == .enabled
+    }
+}
