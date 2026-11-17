@@ -40,7 +40,7 @@ import Testing
           "team": {"issueCount": 1, "pageInfo": {"hasNextPage": true, "endCursor": "next"}, "nodes": [{
             "id": "PR_2", "number": 7, "title": "Other", "url": "https://github.com/acme/web/pull/7",
             "isDraft": true, "updatedAt": "2026-10-01T00:00:00Z",
-            "author": {"__typename": "User", "login": "alice"},
+            "author": {"__typename": "User", "login": "alice", "avatarUrl": "https://avatars.githubusercontent.com/u/1?s=64&v=4"},
             "repository": {"nameWithOwner": "acme/web"},
             "reviewRequests": {"nodes": []}
           }]},
@@ -64,11 +64,13 @@ import Testing
         #expect(full.headOid == "a2")
         #expect(full.repoName == "api")
         #expect(full.autoMerge)
+        #expect(full.author?.avatarURL == nil)
 
         let lite = try #require(data.searches[.team]?.nodes.first).pullRequest
         #expect(!lite.hasDetails)
         #expect(!lite.autoMerge)
         #expect(lite.isDraft)
+        #expect(lite.author?.avatarURL == URL(string: "https://avatars.githubusercontent.com/u/1?s=64&v=4"))
         #expect(data.searches[.team]?.pageInfo.endCursor == "next")
     }
 

@@ -60,9 +60,10 @@ private struct Nodes<T: Decodable & Sendable>: Decodable, Sendable { var nodes: 
 private struct RawActor: Decodable, Sendable {
     var typename: String
     var login: String
-    enum CodingKeys: String, CodingKey { case typename = "__typename", login }
+    var avatarUrl: URL?
+    enum CodingKeys: String, CodingKey { case typename = "__typename", login, avatarUrl }
 
-    var actor: Actor { Actor(login: login, isBot: typename == "Bot") }
+    var actor: Actor { Actor(login: login, isBot: typename == "Bot", avatarURL: avatarUrl) }
 }
 
 struct RawPR: Decodable, Sendable {

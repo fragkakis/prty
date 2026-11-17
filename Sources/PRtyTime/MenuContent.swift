@@ -315,6 +315,10 @@ private struct PRRow: View {
                 Circle()
                     .fill(unread ? Color.accentColor : .clear)
                     .frame(width: 6, height: 6)
+                if showAuthor {
+                    Avatar(url: pr.author?.avatarURL)
+                        .padding(.trailing, 2)
+                }
                 VStack(alignment: .leading, spacing: 2) {
                     Text(pr.title)
                         .fontWeight(forYou ? .semibold : .regular)

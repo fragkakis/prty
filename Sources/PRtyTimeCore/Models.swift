@@ -15,10 +15,13 @@ public enum ReviewDecision: String, Codable, Sendable {
 public struct Actor: Codable, Sendable, Hashable {
     public var login: String
     public var isBot: Bool
+    /// Only fetched for PR authors.
+    public var avatarURL: URL?
 
-    public init(login: String, isBot: Bool = false) {
+    public init(login: String, isBot: Bool = false, avatarURL: URL? = nil) {
         self.login = login
         self.isBot = isBot
+        self.avatarURL = avatarURL
     }
 
     /// GitHub Apps show up as `Bot`; some bots are plain accounts named `foo[bot]`.

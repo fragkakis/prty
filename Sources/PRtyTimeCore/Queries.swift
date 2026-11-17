@@ -33,7 +33,7 @@ public enum Queries {
     static let liteFragment = """
         fragment Lite on PullRequest {
           id number title url isDraft updatedAt
-          author { __typename login }
+          author { __typename login avatarUrl(size: 64) }
           repository { nameWithOwner }
           reviewRequests(first: 10) { nodes { requestedReviewer { __typename ... on Team { slug } ... on User { login } } } }
         }
