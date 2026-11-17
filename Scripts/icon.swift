@@ -26,6 +26,7 @@ func draw() {
 
     // Pull-request glyph: a branch on the left, and a line from the right
     // commit that bends back towards the top-left with an arrow.
+    // Sources/PRtyTime/MenuBarIcon.swift draws the same glyph for the menu bar; keep them in sync.
     NSColor.white.set()
     let width: CGFloat = 46, r: CGFloat = 62
     func ring(_ x: CGFloat, _ y: CGFloat) {

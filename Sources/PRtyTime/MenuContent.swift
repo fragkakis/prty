@@ -10,7 +10,11 @@ struct MenuBarLabel: View {
     var body: some View {
         let count = MenuSections(buckets: store.buckets, staleDays: staleDays, hideBots: ignoreBots).badgeCount
         HStack(spacing: 2) {
-            Image(systemName: store.errorMessage == nil ? "arrow.triangle.pull" : "exclamationmark.triangle")
+            if store.errorMessage == nil {
+                Image(nsImage: MenuBarIcon.image).renderingMode(.template)
+            } else {
+                Image(systemName: "exclamationmark.triangle")
+            }
             if count > 0 { Text("\(count)") }
         }
     }
