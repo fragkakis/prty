@@ -7,6 +7,7 @@ macOS menu-bar app (SwiftUI `MenuBarExtra`) that lists the GitHub PRs waiting on
 - `Sources/PRtyTimeCore`: pure logic, unit-tested. `GitHubClient` (one GraphQL poll, `nodes(ids:)` lookup to tell merged from closed, REST notifications for read state; token from `gh auth token`), `ActivityDiff` (snapshot diff → notifications and unread dots), `Inbox` (clears dots for PRs read on GitHub), `StateStore`.
 - `Sources/PRtyTime`: the app. `PRStore` runs the poll loop; `MenuContent` is the panel; `SettingsView`, `Notifier`, `MenuBarIcon`.
 - `Tests/PRtyTimeCoreTests`: Swift Testing, Core only.
+- The combined poll query takes ~8s against GitHub's ~10s timeout (on timeout it falls back to one request per search). Don't add fields to the search fragments; fetch extras with a separate `nodes(ids:)` query, as `diffStats` and `closedPRs` do.
 - `Scripts/icon.swift` draws `Resources/AppIcon.icns` (`make icon`). `MenuBarIcon.swift` draws the same glyph from the same 1024pt geometry; keep them in sync. SF Symbols can't be used in the app icon (license).
 
 ## Build

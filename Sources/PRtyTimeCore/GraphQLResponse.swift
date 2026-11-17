@@ -160,3 +160,29 @@ struct StatesResponse: Decodable, Sendable {
         (data?.nodes ?? []).compactMap { $0 }.filter { $0.state != "OPEN" }.map(\.closedPR)
     }
 }
+
+/// Decoded body of a `Queries.diffStats` request.
+struct DiffStatsResponse: Decodable, Sendable {
+    struct Node: Decodable, Sendable {
+        var id: String
+        var additions: Int
+        var deletions: Int
+    }
+
+    struct Data: Decodable, Sendable {
+        /// null for ids that no longer resolve.
+        var nodes: [Node?]
+    }
+
+    var data: Data?
+    var errors: [PollResponse.GraphQLError]?
+
+    static func decode(_ body: Foundation.Data) throws -> DiffStatsResponse {
+        try JSONDecoder().decode(DiffStatsResponse.self, from: body)
+    }
+
+    var stats: [String: DiffStat] {
+        let nodes = (data?.nodes ?? []).compactMap { $0 }
+        return Dictionary(nodes.map { ($0.id, DiffStat(additions: $0.additions, deletions: $0.deletions)) }, uniquingKeysWith: { $1 })
+    }
+}

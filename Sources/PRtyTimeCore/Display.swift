@@ -102,3 +102,24 @@ extension PullRequest {
         }
     }
 }
+
+extension DiffStat {
+    /// "+12" and "−3", compacted past 999 ("+1.2k"); nil for an empty diff.
+    public var labels: (added: String, removed: String)? {
+        guard additions + deletions > 0 else { return nil }
+        return ("+" + Self.compact(additions), "−" + Self.compact(deletions))
+    }
+
+    /// 950, 1.2k, 12k.
+    static func compact(_ n: Int) -> String {
+        switch n {
+        case ..<1_000:
+            return "\(n)"
+        case ..<9_950:
+            let tenths = (n + 50) / 100
+            return tenths % 10 == 0 ? "\(tenths / 10)k" : "\(tenths / 10).\(tenths % 10)k"
+        default:
+            return "\((n + 500) / 1_000)k"
+        }
+    }
+}

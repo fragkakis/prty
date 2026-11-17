@@ -47,6 +47,7 @@ struct MenuContent: View {
     let store: PRStore
     @AppStorage(Prefs.staleDays) private var staleDays = 30
     @AppStorage(Prefs.ignoreBots) private var ignoreBots = true
+    @AppStorage(Prefs.showLineCounts) private var showLineCounts = true
     @Environment(\.openSettings) private var openSettings
     @Environment(\.dismiss) private var dismiss
     private let panel = PanelState.shared
@@ -159,7 +160,7 @@ struct MenuContent: View {
             GroupHeader(group: group, key: key, collapsed: collapsed, collapsible: !expandAll, hasUnread: group.items.contains { isUnread($0.pr) })
             if !collapsed {
                 ForEach(group.items) { item in
-                    PRRow(pr: item.pr, unread: isUnread(item.pr), forYou: item.forYou, showAuthor: !mine, labeledStatus: mine) {
+                    PRRow(pr: item.pr, unread: isUnread(item.pr), forYou: item.forYou, showAuthor: !mine, labeledStatus: mine, diff: showLineCounts ? store.diffStats[item.pr.id] : nil) {
                         open(item.pr)
                     }
                     .padding(.leading, 16)
@@ -304,6 +305,7 @@ private struct PRRow: View {
     var showAuthor = true
     /// Spell out the review decision instead of showing just an icon.
     var labeledStatus = false
+    var diff: DiffStat?
     let action: () -> Void
     private let panel = PanelState.shared
 
@@ -324,7 +326,7 @@ private struct PRRow: View {
                         .fontWeight(forYou ? .semibold : .regular)
                         .foregroundStyle(pr.isDraft ? .secondary : .primary)
                         .lineLimit(1)
-                    Text(subtitle)
+                    subtitle
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
@@ -350,12 +352,18 @@ private struct PRRow: View {
         .help(pr.title)
     }
 
-    private var subtitle: String {
-        var parts = ["#\(pr.number)"]
-        if showAuthor, let author = pr.author { parts.append(author.login) }
-        if !forYou, !pr.requestedTeams.isEmpty { parts.append("@" + pr.requestedTeams.joined(separator: ", @")) }
-        parts.append(pr.age())
-        return parts.joined(separator: " · ")
+    /// "#12 · +40 −3 · author · @teams · 2h". The diff comes early so a long team list can't truncate it.
+    private var subtitle: Text {
+        // verbatim: an interpolated Int in a localized Text gets a thousands separator ("#1.570").
+        var text = Text(verbatim: "#\(pr.number)")
+        if let labels = diff?.labels {
+            text = text + Text(" · ") + Text(labels.added).foregroundStyle(Color.linesAdded) + Text(" ") + Text(labels.removed).foregroundStyle(Color.linesRemoved)
+        }
+        var rest: [String] = []
+        if showAuthor, let author = pr.author { rest.append(author.login) }
+        if !forYou, !pr.requestedTeams.isEmpty { rest.append("@" + pr.requestedTeams.joined(separator: ", @")) }
+        rest.append(pr.age())
+        return text + Text(" · " + rest.joined(separator: " · "))
     }
 
     private var background: Color {
@@ -387,6 +395,19 @@ private struct PRRow: View {
         } else {
             Image(systemName: icon).foregroundStyle(color).help(text)
         }
+    }
+}
+
+private extension Color {
+    // GitHub's diff colors. The system green and red are too light to read on white.
+    static let linesAdded = adaptive(light: (0x1A, 0x7F, 0x37), dark: (0x3F, 0xB9, 0x50))
+    static let linesRemoved = adaptive(light: (0xCF, 0x22, 0x2E), dark: (0xF8, 0x51, 0x49))
+
+    static func adaptive(light: (Int, Int, Int), dark: (Int, Int, Int)) -> Color {
+        Color(nsColor: NSColor(name: nil) { appearance in
+            let (r, g, b) = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? dark : light
+            return NSColor(srgbRed: CGFloat(r) / 255, green: CGFloat(g) / 255, blue: CGFloat(b) / 255, alpha: 1)
+        })
     }
 }
 

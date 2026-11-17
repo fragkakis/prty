@@ -13,6 +13,8 @@ final class PRStore {
     private(set) var errorMessage: String?
     private(set) var warning: String?
     private(set) var isRefreshing = false
+    /// Line counts of the PRs on show, by PR id.
+    private(set) var diffStats: [String: DiffStat] = [:]
 
     @ObservationIgnored private var snapshot: Snapshot?
     @ObservationIgnored private let client = GitHubClient()
@@ -20,6 +22,8 @@ final class PRStore {
     @ObservationIgnored private let notifier = Notifier()
     @ObservationIgnored private var loop: Task<Void, Never>?
     @ObservationIgnored private var failures = 0
+    /// The `updatedAt` each line count was fetched at, so only changed PRs are fetched again.
+    @ObservationIgnored private var diffStatsAt: [String: Date] = [:]
     @ObservationIgnored private let log = Logger(subsystem: "com.fragkakis.prty", category: "poll")
 
     func start() {
@@ -112,9 +116,11 @@ final class PRStore {
             failures = 0
             persist()
             diff.notifications.forEach(notifier.post)
+            let shown = MenuSections(buckets: data.buckets, staleDays: settings.staleDays, hideBots: settings.ignoreBots)
+            let diffsFetched = await refreshDiffStats(for: shown.toReview.map(\.pr) + shown.reviewed + shown.mine)
 
             let duration = String(format: "%.1f", Date().timeIntervalSince(started))
-            log.notice("poll ok: requests=\(result.requests) closed=\(data.closed.count) readOnGitHub=\(readOnGitHub) cost=\(result.cost) remaining=\(result.rateLimit?.remaining ?? -1) duration=\(duration, privacy: .public)s notifications=\(diff.notifications.count)")
+            log.notice("poll ok: requests=\(result.requests) closed=\(data.closed.count) readOnGitHub=\(readOnGitHub) cost=\(result.cost) remaining=\(result.rateLimit?.remaining ?? -1) diffs=\(diffsFetched) duration=\(duration, privacy: .public)s notifications=\(diff.notifications.count)")
 
             if let limit = result.rateLimit, limit.remaining < 200 {
                 warning = "Rate limit low (\(limit.remaining) left), pausing until \(limit.resetAt.formatted(date: .omitted, time: .shortened))"
@@ -128,6 +134,25 @@ final class PRStore {
             log.error("poll failed (\(self.failures)x): \(error.localizedDescription, privacy: .public)")
             return min(30 * pow(2, Double(failures - 1)), 600)
         }
+    }
+
+    /// Fetches line counts for PRs that are new or updated since their last fetch,
+    /// and drops the ones no longer shown. Returns how many were requested.
+    private func refreshDiffStats(for prs: [PullRequest]) async -> Int {
+        let updatedAt = Dictionary(prs.map { ($0.id, $0.updatedAt) }, uniquingKeysWith: { first, _ in first })
+        diffStatsAt = diffStatsAt.filter { updatedAt[$0.key] != nil }
+        let kept = diffStats.filter { updatedAt[$0.key] != nil }
+        if kept.count != diffStats.count { diffStats = kept } // avoid redrawing the panel every poll
+        guard UserDefaults.standard.bool(forKey: Prefs.showLineCounts) else { return 0 }
+        let stale = updatedAt.filter { diffStatsAt[$0.key] != $0.value }.map(\.key)
+        guard !stale.isEmpty else { return 0 }
+        do {
+            diffStats.merge(try await client.diffStats(stale)) { $1 }
+            for id in stale { diffStatsAt[id] = updatedAt[id] }
+        } catch {
+            log.error("fetching line counts for \(stale.count) PRs failed: \(error.localizedDescription, privacy: .public)")
+        }
+        return stale.count
     }
 
     private func persist() {

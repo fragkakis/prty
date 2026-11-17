@@ -70,6 +70,13 @@ public enum Queries {
     }
 
     /// Current state of PRs by node id, to tell merged from closed.
+    /// Line counts for the given PRs. Kept out of the poll: on ~150 PRs they
+    /// push the combined query past GitHub's ~10s timeout.
+    public static func diffStats(_ ids: [String]) -> String {
+        let list = ids.map(literal).joined(separator: ", ")
+        return "query {\n  nodes(ids: [\(list)]) { ... on PullRequest { id additions deletions } }\n}"
+    }
+
     public static func states(_ ids: [String]) -> String {
         let list = ids.map(literal).joined(separator: ", ")
         return """

@@ -93,6 +93,13 @@ import Testing
         #expect(!closed[1].merged)
     }
 
+    @Test func decodesDiffStatsSkippingUnresolved() throws {
+        let json = #"{"data": {"nodes": [{"id": "PR_1", "additions": 120, "deletions": 4}, null]}}"#
+        let stats = try DiffStatsResponse.decode(Data(json.utf8)).stats
+        #expect(stats == ["PR_1": DiffStat(additions: 120, deletions: 4)])
+        #expect(Queries.diffStats(["PR_1", "PR_2"]).contains(#"nodes(ids: ["PR_1", "PR_2"])"#))
+    }
+
     @Test func statesQueryListsIds() {
         #expect(Queries.states(["PR_1", "PR_2"]).contains(#"nodes(ids: ["PR_1", "PR_2"])"#))
     }
@@ -206,5 +213,13 @@ import Testing
         }
         #expect(ages == ["now", "now", "1m", "59m", "1h", "23h", "1d", "13d", "2w", "8w"])
         #expect(pr("A", updated: now.addingTimeInterval(60)).age(now: now) == "now")
+    }
+
+    @Test func diffStatLabelsCompactLargeCounts() {
+        let counts = [0, 999, 1_000, 1_049, 1_250, 9_949, 9_950, 12_345].map(DiffStat.compact)
+        #expect(counts == ["0", "999", "1k", "1k", "1.3k", "9.9k", "10k", "12k"])
+        #expect(DiffStat(additions: 0, deletions: 0).labels == nil)
+        let labels = DiffStat(additions: 0, deletions: 7).labels
+        #expect(labels?.added == "+0" && labels?.removed == "−7")
     }
 }

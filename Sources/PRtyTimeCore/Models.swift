@@ -66,6 +66,17 @@ public struct Commit: Codable, Sendable, Hashable {
     }
 }
 
+/// Lines added and removed across a PR. Fetched separately from the poll (`Queries.diffStats`).
+public struct DiffStat: Sendable, Hashable {
+    public var additions: Int
+    public var deletions: Int
+
+    public init(additions: Int, deletions: Int) {
+        self.additions = additions
+        self.deletions = deletions
+    }
+}
+
 public struct PullRequest: Identifiable, Codable, Sendable, Hashable {
     public var id: String
     public var number: Int

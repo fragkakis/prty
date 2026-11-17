@@ -9,6 +9,7 @@ struct SettingsView: View {
     @AppStorage(Prefs.pollMinutes) private var pollMinutes = 2.0
     @AppStorage(Prefs.staleDays) private var staleDays = 30
     @AppStorage(Prefs.ignoreBots) private var ignoreBots = true
+    @AppStorage(Prefs.showLineCounts) private var showLineCounts = true
     @AppStorage(Prefs.notifyKey(.myPRs)) private var notifyMyPRs = true
     @AppStorage(Prefs.notifyKey(.reviewRequests)) private var notifyRequests = true
     @AppStorage(Prefs.notifyKey(.reviewing)) private var notifyReviewing = true
@@ -21,6 +22,11 @@ struct SettingsView: View {
                 Stepper("Check every \(Int(pollMinutes)) min", value: $pollMinutes, in: 1...30, step: 1)
                 Stepper("Hide team requests idle for \(staleDays) days", value: $staleDays, in: 1...365)
                 Toggle("Ignore bots (hide their PRs, mute their comments)", isOn: $ignoreBots)
+            }
+            Section("Panel") {
+                Toggle("Show lines added and removed", isOn: $showLineCounts)
+                    // Fetch the counts now instead of at the next poll.
+                    .onChange(of: showLineCounts) { _, on in if on { PRStore.shared.refreshNow() } }
             }
             Section("Notify me about") {
                 Toggle("Reviews and comments on my PRs", isOn: $notifyMyPRs)

@@ -43,6 +43,7 @@ enum Prefs {
     static let pollMinutes = "pollMinutes"
     static let staleDays = "staleDays"
     static let ignoreBots = "ignoreBots"
+    static let showLineCounts = "showLineCounts"
 
     static func notifyKey(_ category: NotificationCategory) -> String { "notify.\(category.rawValue)" }
 
@@ -53,7 +54,7 @@ enum Prefs {
     }
 
     static func registerDefaults() {
-        var defaults: [String: Any] = [pollMinutes: 2.0, staleDays: 30, ignoreBots: true]
+        var defaults: [String: Any] = [pollMinutes: 2.0, staleDays: 30, ignoreBots: true, showLineCounts: true]
         for category in NotificationCategory.allCases { defaults[notifyKey(category)] = true }
         UserDefaults.standard.register(defaults: defaults)
     }
