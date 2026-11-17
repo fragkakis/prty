@@ -35,6 +35,22 @@ struct SettingsView: View {
                     Text(error).font(.caption).foregroundStyle(.red)
                 }
             }
+            Section {
+                HStack(spacing: 10) {
+                    Image(nsImage: NSApp.applicationIconImage)
+                        .resizable()
+                        .frame(width: 36, height: 36)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(AppInfo.name).font(.headline)
+                        Text("Version \(AppInfo.version)").font(.caption).foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Link(destination: AppInfo.repo) {
+                        Label("GitHub", systemImage: "arrow.up.right.square")
+                    }
+                    .help(AppInfo.repo.absoluteString)
+                }
+            }
         }
         .formStyle(.grouped)
         .frame(width: 420)

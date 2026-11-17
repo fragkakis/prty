@@ -32,6 +32,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
+enum AppInfo {
+    static let name = Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String ?? "PRty Time"
+    /// "dev" when run outside the app bundle (`swift run`).
+    static let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "dev"
+    static let repo = URL(string: "https://github.com/fragkakis/prty-time")!
+}
+
 enum Prefs {
     static let pollMinutes = "pollMinutes"
     static let staleDays = "staleDays"
