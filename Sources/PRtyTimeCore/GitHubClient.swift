@@ -163,28 +163,68 @@ public actor GitHubClient {
         return (data, messages)
     }
 
+    /// Your GitHub notification threads for PRs, updated since `since`, keyed by
+    /// `PullRequest.inboxKey`. Only ones you take part in (review requests, your
+    /// PRs, mentions), not watched repos. REST, so it doesn't use GraphQL points.
+    public func inbox(since: Date, maxPages: Int = 4) async throws -> [String: InboxThread] {
+        var components = URLComponents(string: "https://api.github.com/notifications")!
+        components.queryItems = [
+            URLQueryItem(name: "all", value: "true"),
+            URLQueryItem(name: "participating", value: "true"),
+            URLQueryItem(name: "per_page", value: "50"),
+            URLQueryItem(name: "since", value: since.formatted(.iso8601)),
+        ]
+        var next = components.url
+        var threads: [String: InboxThread] = [:]
+        for _ in 0..<maxPages {
+            guard let url = next else { break }
+            var request = URLRequest(url: url, timeoutInterval: 30)
+            request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+            request.setValue(Self.restAPIVersion, forHTTPHeaderField: "X-GitHub-Api-Version")
+            let (body, response) = try await perform(request)
+            threads.merge(try InboxResponse.decode(body)) { newest, _ in newest }
+            next = Self.nextPage(response.value(forHTTPHeaderField: "Link"))
+        }
+        return threads
+    }
+
+    /// The rel="next" URL of a `Link` header.
+    static func nextPage(_ link: String?) -> URL? {
+        guard let part = link?.split(separator: ",").first(where: { $0.contains(#"rel="next""#) }),
+              let target = part.split(separator: ";").first else { return nil }
+        return URL(string: target.trimmingCharacters(in: CharacterSet(charactersIn: " <>")))
+    }
+
     /// Sends a GraphQL query and returns the body of a 200 response.
-    private func post(_ query: String, retryAuth: Bool = true) async throws -> Data {
+    private func post(_ query: String) async throws -> Data {
         var request = URLRequest(url: Self.endpoint, timeoutInterval: 30)
         request.httpMethod = "POST"
-        request.setValue("bearer \(try currentToken())", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("PRtyTime", forHTTPHeaderField: "User-Agent")
         request.httpBody = try JSONSerialization.data(withJSONObject: ["query": query])
+        return try await perform(request).0
+    }
+
+    /// Sends `request` with the gh token and returns a 200 response; on a 401 it
+    /// rereads the token and retries once.
+    private func perform(_ request: URLRequest, retryAuth: Bool = true) async throws -> (Data, HTTPURLResponse) {
+        var authorized = request
+        authorized.setValue("bearer \(try currentToken())", forHTTPHeaderField: "Authorization")
+        authorized.setValue("PRtyTime", forHTTPHeaderField: "User-Agent")
 
         let body: Data, response: URLResponse
         do {
-            (body, response) = try await session.data(for: request)
+            (body, response) = try await session.data(for: authorized)
         } catch let error as URLError where error.code == .timedOut {
             throw GitHubError.timeout
         }
 
-        switch (response as? HTTPURLResponse)?.statusCode ?? 0 {
+        let http = response as? HTTPURLResponse
+        switch http?.statusCode ?? 0 {
         case 200:
-            return body
+            return (body, http!)
         case 401:
             token = nil
-            if retryAuth { return try await post(query, retryAuth: false) }
+            if retryAuth { return try await perform(request, retryAuth: false) }
             throw GitHubError.auth("GitHub rejected the gh token (401). Run `gh auth login`.")
         case 502, 504:
             throw GitHubError.timeout

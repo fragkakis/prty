@@ -89,8 +89,20 @@ final class PRStore {
                 enabled: Set(NotificationCategory.allCases.filter { defaults.bool(forKey: Prefs.notifyKey($0)) })
             )
             let diff = ActivityDiff.run(previous: snapshot, poll: data, settings: settings)
-            snapshot = diff.snapshot
-            unread = diff.snapshot.unread
+            var next = diff.snapshot
+            // Clear dots for PRs read on GitHub. Bounded, so a dot that never
+            // clears doesn't widen the request forever.
+            var readOnGitHub = 0
+            if let since = next.inboxSince {
+                do {
+                    let inbox = try await client.inbox(since: max(since, Date().addingTimeInterval(-14 * 86_400)))
+                    readOnGitHub = next.syncRead(with: inbox, prs: data.buckets.values.flatMap { $0 })
+                } catch {
+                    log.error("checking GitHub notifications failed: \(error.localizedDescription, privacy: .public)")
+                }
+            }
+            snapshot = next
+            unread = next.unread
             buckets = result.data.buckets
             lastRefresh = Date()
             errorMessage = nil
@@ -102,7 +114,7 @@ final class PRStore {
             diff.notifications.forEach(notifier.post)
 
             let duration = String(format: "%.1f", Date().timeIntervalSince(started))
-            log.notice("poll ok: requests=\(result.requests) closed=\(data.closed.count) cost=\(result.cost) remaining=\(result.rateLimit?.remaining ?? -1) duration=\(duration, privacy: .public)s notifications=\(diff.notifications.count)")
+            log.notice("poll ok: requests=\(result.requests) closed=\(data.closed.count) readOnGitHub=\(readOnGitHub) cost=\(result.cost) remaining=\(result.rateLimit?.remaining ?? -1) duration=\(duration, privacy: .public)s notifications=\(diff.notifications.count)")
 
             if let limit = result.rateLimit, limit.remaining < 200 {
                 warning = "Rate limit low (\(limit.remaining) left), pausing until \(limit.resetAt.formatted(date: .omitted, time: .shortened))"

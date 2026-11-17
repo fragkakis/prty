@@ -100,6 +100,7 @@ import Testing
         let snapshot = try JSONDecoder().decode(Snapshot.self, from: Data(json.utf8))
         #expect(snapshot.prs["A"]?.autoMerge == nil)
         #expect(snapshot.unread == ["A"])
+        #expect(snapshot.unreadSince.isEmpty && snapshot.unreadOnGitHub.isEmpty && snapshot.polledAt == nil)
     }
 
     @Test func nullDataWithErrors() throws {

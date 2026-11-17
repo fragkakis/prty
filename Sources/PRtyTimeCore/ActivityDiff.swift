@@ -31,12 +31,38 @@ public struct Snapshot: Codable, Sendable, Equatable {
     public var directRequests: Set<String>
     public var teamRequests: Set<String>
     public var unread: Set<String>
+    /// For each unread PR, the earliest its newest activity can have happened
+    /// (the poll before the one that found it). Reading it on GitHub after that clears it.
+    public var unreadSince: [String: Date]
+    /// Unread PRs whose GitHub notification was seen unread; once it's read there, so are they.
+    public var unreadOnGitHub: Set<String>
+    public var polledAt: Date?
 
-    public init(prs: [String: PRState] = [:], directRequests: Set<String> = [], teamRequests: Set<String> = [], unread: Set<String> = []) {
+    public init(prs: [String: PRState] = [:], directRequests: Set<String> = [], teamRequests: Set<String> = [], unread: Set<String> = [],
+                unreadSince: [String: Date] = [:], unreadOnGitHub: Set<String> = [], polledAt: Date? = nil) {
         self.prs = prs
         self.directRequests = directRequests
         self.teamRequests = teamRequests
         self.unread = unread
+        self.unreadSince = unreadSince
+        self.unreadOnGitHub = unreadOnGitHub
+        self.polledAt = polledAt
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case prs, directRequests, teamRequests, unread, unreadSince, unreadOnGitHub, polledAt
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        prs = try c.decode([String: PRState].self, forKey: .prs)
+        directRequests = try c.decode(Set<String>.self, forKey: .directRequests)
+        teamRequests = try c.decode(Set<String>.self, forKey: .teamRequests)
+        unread = try c.decode(Set<String>.self, forKey: .unread)
+        // Added later, so older state files don't have them.
+        unreadSince = try c.decodeIfPresent([String: Date].self, forKey: .unreadSince) ?? [:]
+        unreadOnGitHub = try c.decodeIfPresent(Set<String>.self, forKey: .unreadOnGitHub) ?? []
+        polledAt = try c.decodeIfPresent(Date.self, forKey: .polledAt)
     }
 
     /// Detailed PRs that aren't in any list of `poll`: closed, merged, or no longer involving you.
@@ -95,12 +121,18 @@ public enum ActivityDiff {
                 Snapshot.PRState(seenEventIDs: Set(eventIDs(pr)), commitOids: pr.commits.map(\.oid), autoMerge: pr.autoMerge ? true : nil)
             },
             directRequests: Set(direct.map(\.id)),
-            teamRequests: Set(team.map(\.id))
+            teamRequests: Set(team.map(\.id)),
+            polledAt: settings.now
         )
         guard let previous else { return DiffResult(notifications: [], snapshot: snapshot) }
 
         let tracked = Set(Bucket.allCases.flatMap { poll.prs(in: $0) }.map(\.id))
         snapshot.unread = previous.unread.intersection(tracked)
+        snapshot.unreadOnGitHub = previous.unreadOnGitHub.intersection(snapshot.unread)
+        // Dots from before GitHub syncing (or a state file without poll times) assume the last week.
+        let lastWeek = settings.now.addingTimeInterval(-7 * 86_400)
+        snapshot.unreadSince = Dictionary(uniqueKeysWithValues: snapshot.unread.map { ($0, previous.unreadSince[$0] ?? lastWeek) })
+        let activitySince = previous.polledAt ?? lastWeek
 
         let mine = Set(poll.prs(in: .mine).map(\.id))
         var notifications: [PRNotification] = []
@@ -134,7 +166,11 @@ public enum ActivityDiff {
                 }
             }
 
-            if category != nil || !events.isEmpty { snapshot.unread.insert(pr.id) }
+            if category != nil || !events.isEmpty {
+                snapshot.unread.insert(pr.id)
+                snapshot.unreadSince[pr.id] = activitySince
+                snapshot.unreadOnGitHub.remove(pr.id)
+            }
             guard !parts.isEmpty else { continue }
 
             let singleURL = events.count == 1 && !requestNotifies ? events[0].url : nil

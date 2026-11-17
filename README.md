@@ -15,7 +15,7 @@ A macOS menu-bar app that lists the GitHub pull requests waiting on you, and not
 - **My PRs:** your open PRs with their review state (approved, changes requested, awaiting review).
 - **Grouped by repo:** click a repo to collapse it; remembered across launches.
 - **Filter:** type to filter by number (`#123`), title, repo, author or reviewer. Every word must match.
-- **Unread dots:** a blue dot marks new activity you haven't opened. Clicking the PR or its notification opens it on GitHub and clears the dot.
+- **Unread dots:** a blue dot marks new activity you haven't opened. It clears when you open the PR from the panel or its notification, or read it on GitHub (synced through your GitHub notifications). Activity GitHub doesn't notify you about, such as pushes, only clears from PRty Time.
 - **Badge:** the menu-bar icon shows how many PRs await your review.
 
 ### Notifications
@@ -70,7 +70,7 @@ make zip       # universal (Apple Silicon + Intel) build, zipped to .build/PRty-
 
 **Releasing:** push a tag (`git tag v0.2.0 && git push origin v0.2.0`) or publish a release with a new `v*` tag on github.com. The Release workflow builds the zip on GitHub's macOS runners, attaches it to the release (adding the install notes from `.github/release-notes.md` when it creates the release), and updates the cask in [fragkakis/homebrew-tap](https://github.com/fragkakis/homebrew-tap) using the `TAP_DEPLOY_KEY` secret.
 
-- **API usage:** one GraphQL request per poll (every 2 min by default), about 20 of the 5,000 points GitHub allows per hour, plus a 1-point lookup when a PR drops off your lists (to tell merged from closed). Polling pauses when the rate limit runs low.
+- **API usage:** one GraphQL request per poll (every 2 min by default), about 20 of the 5,000 points GitHub allows per hour, plus a 1-point lookup when a PR drops off your lists (to tell merged from closed). While any dot is showing, one REST request to your GitHub notifications checks what you've read there. Polling pauses when the rate limit runs low.
 - **State:** `~/Library/Application Support/Prty/state.json` holds what was already seen, so restarts don't re-notify.
 - **Debug:** `defaults write com.fragkakis.prty notifySelf -bool YES` counts your own comments as activity, so you can test notifications on your own PR.
 
