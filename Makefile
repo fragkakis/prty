@@ -2,7 +2,8 @@ NAME := PRty Time
 EXE := PRtyTime
 APP := .build/$(NAME).app
 ZIP := .build/PRty-Time.zip
-DEST := $(HOME)/Applications
+# Notification Center only shows icons of apps in /Applications, not ~/Applications.
+DEST := /Applications
 ARCHS := --arch arm64 --arch x86_64
 
 .PHONY: build test bundle package zip install run logs clean icon
@@ -24,6 +25,7 @@ package:
 	cp "$(BIN)" "$(APP)/Contents/MacOS/$(EXE)"
 	cp Resources/Info.plist "$(APP)/Contents/Info.plist"
 	$(if $(VERSION),plutil -replace CFBundleShortVersionString -string $(VERSION) "$(APP)/Contents/Info.plist")
+	$(if $(VERSION),plutil -replace CFBundleVersion -string $(VERSION) "$(APP)/Contents/Info.plist")
 	cp Resources/AppIcon.icns "$(APP)/Contents/Resources/AppIcon.icns"
 	codesign --force --sign - "$(APP)"
 

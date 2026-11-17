@@ -40,7 +40,7 @@ With [Homebrew](https://brew.sh), which also installs the GitHub CLI:
 brew install --cask fragkakis/tap/prty-time
 ```
 
-Or download `PRty-Time.zip` from the [latest release](https://github.com/fragkakis/prty-time/releases/latest), unzip it, move `PRty Time.app` to Applications and open it.
+Or download `PRty-Time.zip` from the [latest release](https://github.com/fragkakis/prty-time/releases/latest), unzip it, move `PRty Time.app` to `/Applications` and open it. Use `/Applications`, not `~/Applications`: macOS can't show notification icons for apps inside your home folder.
 
 PRty Time isn't notarized by Apple, so macOS blocks the first launch with "Apple could not verify PRty Time…". Open System Settings → Privacy & Security and click **Open Anyway**, or run `xattr -dr com.apple.quarantine "/Applications/PRty Time.app"`. You only need to do this once per download.
 
@@ -51,7 +51,7 @@ Needs the Xcode Command Line Tools (`xcode-select --install`); full Xcode isn't 
 ```sh
 git clone https://github.com/fragkakis/prty-time.git
 cd prty-time
-make install   # builds, ad-hoc signs, copies to ~/Applications/PRty Time.app and launches it
+make install   # builds, ad-hoc signs, copies to /Applications/PRty Time.app and launches it
 ```
 
 ### After installing
@@ -68,7 +68,7 @@ make icon      # redraw Resources/AppIcon.icns from Scripts/icon.swift
 make zip       # universal (Apple Silicon + Intel) build, zipped to .build/PRty-Time.zip
 ```
 
-**Releasing:** push a tag (`git tag v0.2.0 && git push origin v0.2.0`) or publish a release with a new `v*` tag on github.com. The Release workflow builds the zip on GitHub's macOS runners, attaches it to the release (adding the install notes from `.github/release-notes.md` when it creates the release), and updates the cask in [fragkakis/homebrew-tap](https://github.com/fragkakis/homebrew-tap) using the `TAP_DEPLOY_KEY` secret.
+**Releasing:** bump `CFBundleShortVersionString` and `CFBundleVersion` in `Resources/Info.plist`, then push a tag (`git tag v1.2.3 && git push origin v1.2.3`) or publish a release with a new `v*` tag on github.com. The Release workflow builds the zip on GitHub's macOS runners, attaches it to the release (adding the install notes from `.github/release-notes.md` when it creates the release), and updates the cask in [fragkakis/homebrew-tap](https://github.com/fragkakis/homebrew-tap) using the `TAP_DEPLOY_KEY` secret.
 
 - **API usage:** one GraphQL request per poll (every 2 min by default), about 20 of the 5,000 points GitHub allows per hour, plus a 1-point lookup when a PR drops off your lists (to tell merged from closed). While any dot is showing, one REST request to your GitHub notifications checks what you've read there. Polling pauses when the rate limit runs low.
 - **State:** `~/Library/Application Support/Prty/state.json` holds what was already seen, so restarts don't re-notify.
