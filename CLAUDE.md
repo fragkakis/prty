@@ -31,7 +31,7 @@ To check without waiting for a notification, render `[[ISIcon alloc] initWithBun
 
 1. Bump `CFBundleShortVersionString` and `CFBundleVersion` in `Resources/Info.plist`; commit `chore: bump version to X.Y.Z`.
 2. `git push origin main && git tag vX.Y.Z && git push origin vX.Y.Z`.
-3. `.github/workflows/release.yml` builds the universal zip (version taken from the tag), creates the release with `.github/release-notes.md`, and updates `Casks/prty-time.rb` in `fragkakis/homebrew-tap` through the `TAP_DEPLOY_KEY` secret (a deploy key with write access).
+3. `.github/workflows/release.yml` builds the universal zip (version taken from the tag), creates the release with notes from `Scripts/release-changes.sh` (commit subjects since the last tag, minus chore/docs/test/ci, so write them for users) above `.github/release-notes.md`, and updates `Casks/prty-time.rb` in `fragkakis/homebrew-tap` through the `TAP_DEPLOY_KEY` secret (a deploy key with write access).
 4. Check with `gh run watch`, then that the cask's `sha256` matches the release asset.
 
 The app is ad-hoc signed, not notarized, so users click Open Anyway on first launch. The official homebrew/cask repo would need notarization (Developer ID).

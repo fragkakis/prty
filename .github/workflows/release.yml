@@ -14,7 +14,10 @@ jobs:
   release:
     runs-on: macos-26
     steps:
+      # Full history and tags, for the commit list in the release notes.
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       - name: Build
         run: |
@@ -36,11 +39,12 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # Releases created on github.com already exist: just attach the zip.
+          # Releases created on github.com already exist: just attach the zip and keep their notes.
           if gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
             gh release upload "$GITHUB_REF_NAME" .build/PRty-Time.zip --clobber
           else
-            gh release create "$GITHUB_REF_NAME" .build/PRty-Time.zip --title "PRty Time $GITHUB_REF_NAME" --notes-file .github/release-notes.md --generate-notes
+            { Scripts/release-changes.sh "$GITHUB_REF_NAME"; echo; cat .github/release-notes.md; } > "$RUNNER_TEMP/notes.md"
+            gh release create "$GITHUB_REF_NAME" .build/PRty-Time.zip --title "PRty Time $GITHUB_REF_NAME" --notes-file "$RUNNER_TEMP/notes.md"
           fi
 
       # TAP_DEPLOY_KEY: private half of a deploy key with write access to fragkakis/homebrew-tap.
