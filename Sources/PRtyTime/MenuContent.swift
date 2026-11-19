@@ -8,7 +8,7 @@ struct MenuBarLabel: View {
     @AppStorage(Prefs.ignoreBots) private var ignoreBots = true
 
     var body: some View {
-        let count = MenuSections(buckets: store.buckets, staleDays: staleDays, hideBots: ignoreBots).badgeCount
+        let count = MenuSections(buckets: store.buckets, staleDays: staleDays, hideBots: ignoreBots, snoozed: Set(store.snoozed.keys)).badgeCount
         HStack(spacing: 2) {
             if store.errorMessage == nil {
                 Image(nsImage: MenuBarIcon.image).renderingMode(.template)
@@ -36,6 +36,8 @@ final class PanelState {
     var query = ""
     var hoveredID: String?
     var listHeights: [PanelTab: CGFloat] = [:]
+    /// Tabs whose Snoozed section is open; closed at launch.
+    var snoozedOpen: Set<PanelTab> = []
     /// Collapsed repo groups as "<section>/<owner>/<repo>", kept across launches.
     var collapsed = Set(UserDefaults.standard.stringArray(forKey: PanelState.collapsedKey) ?? []) {
         didSet { UserDefaults.standard.set(collapsed.sorted(), forKey: Self.collapsedKey) }
@@ -54,7 +56,7 @@ struct MenuContent: View {
     private let panel = PanelState.shared
 
     var body: some View {
-        let all = MenuSections(buckets: store.buckets, staleDays: staleDays, hideBots: ignoreBots)
+        let all = MenuSections(buckets: store.buckets, staleDays: staleDays, hideBots: ignoreBots, snoozed: Set(store.snoozed.keys))
         let shown = filtering ? all.filtered(panel.query) : all
 
         VStack(spacing: 0) {
@@ -146,11 +148,49 @@ struct MenuContent: View {
             header("Reviewed by you")
             groups(sections.reviewed.map { PRItem(pr: $0) }, section: "reviewed", expandAll: expandAll)
         }
+        snoozedSection(sections.snoozedReview, tab: .review, expandAll: expandAll)
     }
 
     @ViewBuilder private func mineTab(_ sections: MenuSections, expandAll: Bool) -> some View {
         if sections.mine.isEmpty { empty(filtering ? "No matching PRs" : "No open PRs") }
         groups(sections.mine.map { PRItem(pr: $0) }, section: "mine", mine: true, expandAll: expandAll)
+        snoozedSection(sections.snoozedMine.map { PRItem(pr: $0) }, tab: .mine, mine: true, expandAll: expandAll)
+    }
+
+    /// Closed until clicked; open while filtering so no match is hidden.
+    @ViewBuilder private func snoozedSection(_ items: [PRItem], tab: PanelTab, mine: Bool = false, expandAll: Bool) -> some View {
+        if !items.isEmpty {
+            let open = expandAll || panel.snoozedOpen.contains(tab)
+            Button {
+                withAnimation(.snappy(duration: 0.15)) {
+                    if open { panel.snoozedOpen.remove(tab) } else { panel.snoozedOpen.insert(tab) }
+                }
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "chevron.right")
+                        .font(.caption2.weight(.bold))
+                        .rotationEffect(.degrees(open ? 90 : 0))
+                        .frame(width: 10)
+                    Text("Snoozed")
+                    Text(verbatim: "\(items.count)").fontWeight(.regular)
+                    Spacer()
+                }
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .allowsHitTesting(!expandAll)
+            .padding(.horizontal, 6)
+            .padding(.top, 10)
+            .padding(.bottom, 4)
+            .help("Snoozed PRs come back when there's new activity on them, or when their time runs out")
+            if open {
+                // Dimmed, to tell them from the groups above.
+                groups(items, section: "snoozed-\(tab)", mine: mine, expandAll: expandAll)
+                    .opacity(0.6)
+            }
+        }
     }
 
     /// Collapsible per-repo groups. `section` keeps collapse state separate per list.
@@ -163,12 +203,24 @@ struct MenuContent: View {
                 ForEach(group.items) { item in
                     PRRow(pr: item.pr, unread: isUnread(item.pr), forYou: item.forYou, showAuthor: !mine, labeledStatus: mine,
                           diff: showLineCounts ? store.diffStats[item.pr.id] : nil,
-                          merge: showChecks ? store.mergeStatus[item.pr.id] : nil) {
+                          merge: showChecks ? store.mergeStatus[item.pr.id] : nil,
+                          snoozedUntil: store.snoozed[item.pr.id]) {
                         open(item.pr)
                     }
+                    .contextMenu { snoozeMenu(item.pr) }
                     .padding(.leading, 16)
                 }
             }
+        }
+    }
+
+    @ViewBuilder private func snoozeMenu(_ pr: PullRequest) -> some View {
+        if store.snoozed[pr.id] != nil {
+            Button("Unsnooze") { store.unsnooze(pr.id) }
+        } else {
+            Button("Snooze until new activity") { store.snooze(pr, until: Snooze.untilActivity) }
+            Button("Snooze until tomorrow morning") { store.snooze(pr, until: Snooze.tomorrowMorning(after: Date())) }
+            Button("Snooze until next week") { store.snooze(pr, until: Snooze.nextWeek(after: Date())) }
         }
     }
 
@@ -311,6 +363,7 @@ private struct PRRow: View {
     var diff: DiffStat?
     /// Only fetched for your PRs.
     var merge: MergeStatus?
+    var snoozedUntil: Date?
     let action: () -> Void
     private let panel = PanelState.shared
 
@@ -373,6 +426,9 @@ private struct PRRow: View {
         if showAuthor, let author = pr.author { rest.append(author.login) }
         if !forYou, !pr.requestedTeams.isEmpty { rest.append("@" + pr.requestedTeams.joined(separator: ", @")) }
         rest.append(pr.age())
+        if let until = snoozedUntil, until != Snooze.untilActivity {
+            rest.append("until " + until.formatted(.dateTime.weekday(.abbreviated).hour().minute()))
+        }
         return text + Text(" · " + rest.joined(separator: " · "))
     }
 

@@ -46,6 +46,10 @@ public struct MenuSections: Sendable {
     /// PRs you reviewed that nobody is currently asking you to review again.
     public var reviewed: [PullRequest] = []
     public var mine: [PullRequest] = []
+    /// Snoozed PRs, kept out of the lists above: those of the To review tab,
+    /// most recently updated first, and your own.
+    public var snoozedReview: [PRItem] = []
+    public var snoozedMine: [PullRequest] = []
 
     /// Shown next to the menu-bar icon.
     public var badgeCount: Int { toReview.count }
@@ -56,10 +60,12 @@ public struct MenuSections: Sendable {
         copy.toReview = toReview.filter { $0.pr.matches(query) }
         copy.reviewed = reviewed.filter { $0.matches(query) }
         copy.mine = mine.filter { $0.matches(query) }
+        copy.snoozedReview = snoozedReview.filter { $0.pr.matches(query) }
+        copy.snoozedMine = snoozedMine.filter { $0.matches(query) }
         return copy
     }
 
-    public init(buckets: [Bucket: [PullRequest]], staleDays: Int, hideBots: Bool, now: Date = Date()) {
+    public init(buckets: [Bucket: [PullRequest]], staleDays: Int, hideBots: Bool, snoozed: Set<String> = [], now: Date = Date()) {
         var seen = Set<String>()
         func take(_ bucket: Bucket) -> [PullRequest] {
             (buckets[bucket] ?? [])
@@ -74,6 +80,14 @@ public struct MenuSections: Sendable {
         let team = take(.team).filter { $0.updatedAt >= cutoff }
         toReview = (direct.map { PRItem(pr: $0, forYou: true) } + team.map { PRItem(pr: $0) })
             .sorted { $0.pr.updatedAt > $1.pr.updatedAt }
+
+        guard !snoozed.isEmpty else { return }
+        snoozedReview = (toReview.filter { snoozed.contains($0.id) } + reviewed.filter { snoozed.contains($0.id) }.map { PRItem(pr: $0) })
+            .sorted { $0.pr.updatedAt > $1.pr.updatedAt }
+        snoozedMine = mine.filter { snoozed.contains($0.id) }
+        toReview.removeAll { snoozed.contains($0.id) }
+        reviewed.removeAll { snoozed.contains($0.id) }
+        mine.removeAll { snoozed.contains($0.id) }
     }
 }
 

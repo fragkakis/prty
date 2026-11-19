@@ -114,6 +114,9 @@ public struct DiffSettings: Sendable {
 public struct DiffResult: Sendable {
     public var notifications: [PRNotification]
     public var snapshot: Snapshot
+    /// PRs with something new: what gives them a dot, and your PRs' checks
+    /// starting to fail. Wakes them from a snooze.
+    public var activity: Set<String> = []
 }
 
 public enum ActivityDiff {
@@ -153,6 +156,7 @@ public enum ActivityDiff {
 
         let mine = Set(poll.prs(in: .mine).map(\.id))
         var notifications: [PRNotification] = []
+        var activity = Set<String>()
 
         let orderedPRs = Bucket.allCases.flatMap { poll.prs(in: $0) }
         var handled = Set<String>()
@@ -184,7 +188,8 @@ public enum ActivityDiff {
             }
 
             // No dot: the row's red cross already shows it until the checks pass.
-            let checksFailed = mine.contains(pr.id) && settings.enabled.contains(.checks) && newlyFailing(pr.id, previous: previous, poll: poll)
+            let failing = mine.contains(pr.id) && newlyFailing(pr.id, previous: previous, poll: poll)
+            let checksFailed = failing && settings.enabled.contains(.checks)
             if checksFailed { parts.append("Checks failed") }
 
             if category != nil || !events.isEmpty {
@@ -192,6 +197,7 @@ public enum ActivityDiff {
                 snapshot.unreadSince[pr.id] = activitySince
                 snapshot.unreadOnGitHub.remove(pr.id)
             }
+            if category != nil || !events.isEmpty || failing { activity.insert(pr.id) }
             guard !parts.isEmpty else { continue }
 
             let singleURL = events.count == 1 && !requestNotifies && !checksFailed ? events[0].url : nil
@@ -222,7 +228,7 @@ public enum ActivityDiff {
                 ))
             }
         }
-        return DiffResult(notifications: notifications, snapshot: snapshot)
+        return DiffResult(notifications: notifications, snapshot: snapshot, activity: activity)
     }
 
     /// The head commit's checks fail and didn't on the last poll that fetched

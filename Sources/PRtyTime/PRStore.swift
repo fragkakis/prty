@@ -17,6 +17,13 @@ final class PRStore {
     private(set) var diffStats: [String: DiffStat] = [:]
     /// Checks and conflicts of your PRs, by PR id. Empty unless `Prefs.showChecks` is on.
     private(set) var mergeStatus: [String: MergeStatus] = [:]
+    /// Snoozed PRs by id, with when they come back on their own (see `Snooze`).
+    /// Not in the snapshot, which a poll replaces after awaiting GitHub: a snooze
+    /// made meanwhile would be lost.
+    private(set) var snoozed = UserDefaults.standard.dictionary(forKey: PRStore.snoozedKey) as? [String: Date] ?? [:] {
+        didSet { UserDefaults.standard.set(snoozed, forKey: Self.snoozedKey) }
+    }
+    private static let snoozedKey = "snoozed"
 
     @ObservationIgnored private var snapshot: Snapshot?
     @ObservationIgnored private let client = GitHubClient()
@@ -51,6 +58,16 @@ final class PRStore {
     func open(_ pr: PullRequest) {
         NSWorkspace.shared.open(pr.url)
         markRead(pr.id)
+    }
+
+    /// Hides the PR until `until` or new activity, and clears its dot.
+    func snooze(_ pr: PullRequest, until: Date) {
+        snoozed[pr.id] = until
+        markRead(pr.id)
+    }
+
+    func unsnooze(_ id: String) {
+        snoozed[id] = nil
     }
 
     func markRead(_ id: String) {
@@ -123,6 +140,9 @@ final class PRStore {
             buckets = result.data.buckets
             // On a failed fetch (nil) keep showing the last ones.
             if let fresh = data.mergeStatus, fresh != mergeStatus { mergeStatus = fresh }
+            let listed = Set(data.buckets.values.joined().map(\.id))
+            let stillSnoozed = Snooze.remaining(snoozed, activity: diff.activity, listed: listed, now: Date())
+            if stillSnoozed != snoozed { snoozed = stillSnoozed }
             lastRefresh = Date()
             errorMessage = nil
             warning = result.usedFallback
