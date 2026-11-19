@@ -77,6 +77,35 @@ public struct DiffStat: Sendable, Hashable {
     }
 }
 
+/// The combined result of a commit's checks and commit statuses.
+public enum CheckState: String, Codable, Sendable {
+    case passing, failing, pending
+
+    /// From GitHub's `StatusState`.
+    init?(rollup: String) {
+        switch rollup {
+        case "SUCCESS": self = .passing
+        case "FAILURE", "ERROR": self = .failing
+        case "PENDING", "EXPECTED": self = .pending
+        default: return nil
+        }
+    }
+}
+
+/// CI and merge conflicts of a PR. Fetched separately from the poll (`Queries.mergeStatus`).
+public struct MergeStatus: Sendable, Hashable {
+    /// Of the head commit; nil when it has no checks.
+    public var checks: CheckState?
+    public var conflicting: Bool
+    public var headOid: String?
+
+    public init(checks: CheckState?, conflicting: Bool = false, headOid: String?) {
+        self.checks = checks
+        self.conflicting = conflicting
+        self.headOid = headOid
+    }
+}
+
 public struct PullRequest: Identifiable, Codable, Sendable, Hashable {
     public var id: String
     public var number: Int
@@ -181,11 +210,15 @@ public struct PollData: Sendable {
     public var buckets: [Bucket: [PullRequest]]
     /// PRs from the previous snapshot that have since been closed or merged.
     public var closed: [ClosedPR]
+    /// Checks and conflicts of your PRs, by PR id. Empty when they aren't
+    /// fetched; nil when fetching them failed, so the last known states carry over.
+    public var mergeStatus: [String: MergeStatus]?
 
-    public init(viewer: String, buckets: [Bucket: [PullRequest]], closed: [ClosedPR] = []) {
+    public init(viewer: String, buckets: [Bucket: [PullRequest]], closed: [ClosedPR] = [], mergeStatus: [String: MergeStatus]? = [:]) {
         self.viewer = viewer
         self.buckets = buckets
         self.closed = closed
+        self.mergeStatus = mergeStatus
     }
 
     public func prs(in bucket: Bucket) -> [PullRequest] { buckets[bucket] ?? [] }

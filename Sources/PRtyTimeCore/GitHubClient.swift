@@ -160,6 +160,18 @@ public actor GitHubClient {
         return stats
     }
 
+    /// Checks and merge conflicts by PR id.
+    public func mergeStatus(_ ids: [String]) async throws -> [String: MergeStatus] {
+        var statuses: [String: MergeStatus] = [:]
+        // nodes(ids:) takes at most 100.
+        for start in stride(from: 0, to: ids.count, by: 100) {
+            let decoded = try MergeStatusResponse.decode(try await post(Queries.mergeStatus(Array(ids[start..<min(start + 100, ids.count)]))))
+            guard decoded.data != nil else { throw GitHubError.graphQL(decoded.errors?.map(\.message) ?? []) }
+            statuses.merge(decoded.statuses) { $1 }
+        }
+        return statuses
+    }
+
     private func send(_ pages: [SearchPage]) async throws -> (PollResponse.Data, [String]) {
         let decoded = try PollResponse.decode(try await post(Queries.build(pages)))
         let messages = decoded.errors?.map(\.message) ?? []

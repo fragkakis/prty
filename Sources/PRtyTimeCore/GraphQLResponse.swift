@@ -186,3 +186,49 @@ struct DiffStatsResponse: Decodable, Sendable {
         return Dictionary(nodes.map { ($0.id, DiffStat(additions: $0.additions, deletions: $0.deletions)) }, uniquingKeysWith: { $1 })
     }
 }
+
+/// Decoded body of a `Queries.mergeStatus` request.
+struct MergeStatusResponse: Decodable, Sendable {
+    struct Node: Decodable, Sendable {
+        private struct CommitNode: Decodable, Sendable {
+            struct Inner: Decodable, Sendable {
+                struct Rollup: Decodable, Sendable { var state: String }
+                var oid: String
+                /// null when the commit has no checks or statuses.
+                var statusCheckRollup: Rollup?
+            }
+            var commit: Inner
+        }
+
+        var id: String
+        /// MERGEABLE, CONFLICTING, or UNKNOWN while GitHub works it out.
+        private var mergeable: String
+        private var commits: Nodes<CommitNode>
+
+        var status: MergeStatus {
+            let head = commits.nodes.last?.commit
+            return MergeStatus(
+                checks: head?.statusCheckRollup.flatMap { CheckState(rollup: $0.state) },
+                conflicting: mergeable == "CONFLICTING",
+                headOid: head?.oid
+            )
+        }
+    }
+
+    struct Data: Decodable, Sendable {
+        /// null for ids that no longer resolve.
+        var nodes: [Node?]
+    }
+
+    var data: Data?
+    var errors: [PollResponse.GraphQLError]?
+
+    static func decode(_ body: Foundation.Data) throws -> MergeStatusResponse {
+        try JSONDecoder().decode(MergeStatusResponse.self, from: body)
+    }
+
+    var statuses: [String: MergeStatus] {
+        let nodes = (data?.nodes ?? []).compactMap { $0 }
+        return Dictionary(nodes.map { ($0.id, $0.status) }, uniquingKeysWith: { $1 })
+    }
+}

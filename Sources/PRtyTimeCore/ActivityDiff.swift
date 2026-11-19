@@ -9,6 +9,8 @@ public enum NotificationCategory: String, CaseIterable, Sendable {
     case reviewing
     /// PRs you authored or review getting merged.
     case merged
+    /// Checks failing on PRs you authored, while their checks are fetched.
+    case checks
 }
 
 /// What the previous poll saw. Persisted between launches.
@@ -18,11 +20,18 @@ public struct Snapshot: Codable, Sendable, Equatable {
         public var commitOids: [String]
         /// Auto-merge was enabled. Optional so older state files still decode.
         public var autoMerge: Bool?
+        /// Last fetched checks (nil also when the commit had none) and the
+        /// commit they were for; nil when they weren't fetched.
+        public var checks: CheckState?
+        public var checksOid: String?
 
-        public init(seenEventIDs: Set<String> = [], commitOids: [String] = [], autoMerge: Bool? = nil) {
+        public init(seenEventIDs: Set<String> = [], commitOids: [String] = [], autoMerge: Bool? = nil,
+                    checks: CheckState? = nil, checksOid: String? = nil) {
             self.seenEventIDs = seenEventIDs
             self.commitOids = commitOids
             self.autoMerge = autoMerge
+            self.checks = checks
+            self.checksOid = checksOid
         }
     }
 
@@ -118,7 +127,15 @@ public enum ActivityDiff {
 
         var snapshot = Snapshot(
             prs: detailed.mapValues { pr in
-                Snapshot.PRState(seenEventIDs: Set(eventIDs(pr)), commitOids: pr.commits.map(\.oid), autoMerge: pr.autoMerge ? true : nil)
+                var state = Snapshot.PRState(seenEventIDs: Set(eventIDs(pr)), commitOids: pr.commits.map(\.oid), autoMerge: pr.autoMerge ? true : nil)
+                if let statuses = poll.mergeStatus {
+                    state.checks = statuses[pr.id]?.checks
+                    state.checksOid = statuses[pr.id]?.headOid
+                } else if let before = previous?.prs[pr.id] {
+                    state.checks = before.checks
+                    state.checksOid = before.checksOid
+                }
+                return state
             },
             directRequests: Set(direct.map(\.id)),
             teamRequests: Set(team.map(\.id)),
@@ -166,6 +183,10 @@ public enum ActivityDiff {
                 }
             }
 
+            // No dot: the row's red cross already shows it until the checks pass.
+            let checksFailed = mine.contains(pr.id) && settings.enabled.contains(.checks) && newlyFailing(pr.id, previous: previous, poll: poll)
+            if checksFailed { parts.append("Checks failed") }
+
             if category != nil || !events.isEmpty {
                 snapshot.unread.insert(pr.id)
                 snapshot.unreadSince[pr.id] = activitySince
@@ -173,13 +194,14 @@ public enum ActivityDiff {
             }
             guard !parts.isEmpty else { continue }
 
-            let singleURL = events.count == 1 && !requestNotifies ? events[0].url : nil
+            let singleURL = events.count == 1 && !requestNotifies && !checksFailed ? events[0].url : nil
+            let checksURL = checksFailed && parts.count == 1 ? pr.url.appending(path: "checks") : nil
             notifications.append(PRNotification(
                 prID: pr.id,
                 title: "\(pr.repoName) #\(pr.number)",
                 subtitle: pr.title,
                 body: parts.joined(separator: " · "),
-                url: singleURL ?? pr.url
+                url: checksURL ?? singleURL ?? pr.url
             ))
         }
 
@@ -201,6 +223,15 @@ public enum ActivityDiff {
             }
         }
         return DiffResult(notifications: notifications, snapshot: snapshot)
+    }
+
+    /// The head commit's checks fail and didn't on the last poll that fetched
+    /// them. A PR without checks fetched before, e.g. right after turning them
+    /// on, isn't announced.
+    static func newlyFailing(_ id: String, previous: Snapshot, poll: PollData) -> Bool {
+        guard let now = poll.mergeStatus?[id], now.checks == .failing,
+              let before = previous.prs[id], before.checksOid != nil else { return false }
+        return before.checks != .failing || before.checksOid != now.headOid
     }
 
     // MARK: - Events

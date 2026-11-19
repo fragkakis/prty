@@ -10,10 +10,12 @@ struct SettingsView: View {
     @AppStorage(Prefs.staleDays) private var staleDays = 30
     @AppStorage(Prefs.ignoreBots) private var ignoreBots = true
     @AppStorage(Prefs.showLineCounts) private var showLineCounts = true
+    @AppStorage(Prefs.showChecks) private var showChecks = false
     @AppStorage(Prefs.notifyKey(.myPRs)) private var notifyMyPRs = true
     @AppStorage(Prefs.notifyKey(.reviewRequests)) private var notifyRequests = true
     @AppStorage(Prefs.notifyKey(.reviewing)) private var notifyReviewing = true
     @AppStorage(Prefs.notifyKey(.merged)) private var notifyMerged = true
+    @AppStorage(Prefs.notifyKey(.checks)) private var notifyChecks = true
     private let loginItem = LoginItem.shared
 
     var body: some View {
@@ -27,12 +29,16 @@ struct SettingsView: View {
                 Toggle("Show lines added and removed", isOn: $showLineCounts)
                     // Fetch the counts now instead of at the next poll.
                     .onChange(of: showLineCounts) { _, on in if on { PRStore.shared.refreshNow() } }
+                Toggle("Show checks and merge conflicts on my PRs", isOn: $showChecks)
+                    .onChange(of: showChecks) { _, on in if on { PRStore.shared.refreshNow() } }
             }
             Section("Notify me about") {
                 Toggle("Reviews and comments on my PRs", isOn: $notifyMyPRs)
                 Toggle("New review requests", isOn: $notifyRequests)
                 Toggle("Activity on PRs I review", isOn: $notifyReviewing)
                 Toggle("Merges of my PRs and PRs I review", isOn: $notifyMerged)
+                Toggle("Failed checks on my PRs", isOn: $notifyChecks)
+                    .disabled(!showChecks)
             }
             Section {
                 // A closure, not `set: loginItem.set`: passing the method crashes Swift 6.3's compiler.

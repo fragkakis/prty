@@ -15,6 +15,8 @@ final class PRStore {
     private(set) var isRefreshing = false
     /// Line counts of the PRs on show, by PR id.
     private(set) var diffStats: [String: DiffStat] = [:]
+    /// Checks and conflicts of your PRs, by PR id. Empty unless `Prefs.showChecks` is on.
+    private(set) var mergeStatus: [String: MergeStatus] = [:]
 
     @ObservationIgnored private var snapshot: Snapshot?
     @ObservationIgnored private let client = GitHubClient()
@@ -86,6 +88,17 @@ final class PRStore {
                     log.error("checking \(missing.count) closed PRs failed: \(error.localizedDescription, privacy: .public)")
                 }
             }
+            // Every poll, not only for updated PRs like line counts: checks
+            // finishing needn't change a PR's updatedAt.
+            if defaults.bool(forKey: Prefs.showChecks) {
+                let mine = data.prs(in: .mine).map(\.id)
+                do {
+                    data.mergeStatus = try await client.mergeStatus(mine)
+                } catch {
+                    data.mergeStatus = nil
+                    log.error("fetching checks for \(mine.count) PRs failed: \(error.localizedDescription, privacy: .public)")
+                }
+            }
             let settings = DiffSettings(
                 ignoreBots: defaults.bool(forKey: Prefs.ignoreBots),
                 staleDays: defaults.integer(forKey: Prefs.staleDays),
@@ -108,6 +121,8 @@ final class PRStore {
             snapshot = next
             unread = next.unread
             buckets = result.data.buckets
+            // On a failed fetch (nil) keep showing the last ones.
+            if let fresh = data.mergeStatus, fresh != mergeStatus { mergeStatus = fresh }
             lastRefresh = Date()
             errorMessage = nil
             warning = result.usedFallback
@@ -120,7 +135,7 @@ final class PRStore {
             let diffsFetched = await refreshDiffStats(for: shown.toReview.map(\.pr) + shown.reviewed + shown.mine)
 
             let duration = String(format: "%.1f", Date().timeIntervalSince(started))
-            log.notice("poll ok: requests=\(result.requests) closed=\(data.closed.count) readOnGitHub=\(readOnGitHub) cost=\(result.cost) remaining=\(result.rateLimit?.remaining ?? -1) diffs=\(diffsFetched) duration=\(duration, privacy: .public)s notifications=\(diff.notifications.count)")
+            log.notice("poll ok: requests=\(result.requests) closed=\(data.closed.count) readOnGitHub=\(readOnGitHub) cost=\(result.cost) remaining=\(result.rateLimit?.remaining ?? -1) diffs=\(diffsFetched) checks=\(data.mergeStatus?.count ?? -1) duration=\(duration, privacy: .public)s notifications=\(diff.notifications.count)")
 
             if let limit = result.rateLimit, limit.remaining < 200 {
                 warning = "Rate limit low (\(limit.remaining) left), pausing until \(limit.resetAt.formatted(date: .omitted, time: .shortened))"

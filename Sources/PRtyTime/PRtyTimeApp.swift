@@ -44,6 +44,8 @@ enum Prefs {
     static let staleDays = "staleDays"
     static let ignoreBots = "ignoreBots"
     static let showLineCounts = "showLineCounts"
+    /// Fetch and show checks and merge conflicts of your PRs.
+    static let showChecks = "showChecks"
 
     static func notifyKey(_ category: NotificationCategory) -> String { "notify.\(category.rawValue)" }
 
@@ -54,7 +56,7 @@ enum Prefs {
     }
 
     static func registerDefaults() {
-        var defaults: [String: Any] = [pollMinutes: 2.0, staleDays: 30, ignoreBots: true, showLineCounts: true]
+        var defaults: [String: Any] = [pollMinutes: 2.0, staleDays: 30, ignoreBots: true, showLineCounts: true, showChecks: false]
         for category in NotificationCategory.allCases { defaults[notifyKey(category)] = true }
         UserDefaults.standard.register(defaults: defaults)
     }

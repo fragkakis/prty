@@ -48,6 +48,7 @@ struct MenuContent: View {
     @AppStorage(Prefs.staleDays) private var staleDays = 30
     @AppStorage(Prefs.ignoreBots) private var ignoreBots = true
     @AppStorage(Prefs.showLineCounts) private var showLineCounts = true
+    @AppStorage(Prefs.showChecks) private var showChecks = false
     @Environment(\.openSettings) private var openSettings
     @Environment(\.dismiss) private var dismiss
     private let panel = PanelState.shared
@@ -160,7 +161,9 @@ struct MenuContent: View {
             GroupHeader(group: group, key: key, collapsed: collapsed, collapsible: !expandAll, hasUnread: group.items.contains { isUnread($0.pr) })
             if !collapsed {
                 ForEach(group.items) { item in
-                    PRRow(pr: item.pr, unread: isUnread(item.pr), forYou: item.forYou, showAuthor: !mine, labeledStatus: mine, diff: showLineCounts ? store.diffStats[item.pr.id] : nil) {
+                    PRRow(pr: item.pr, unread: isUnread(item.pr), forYou: item.forYou, showAuthor: !mine, labeledStatus: mine,
+                          diff: showLineCounts ? store.diffStats[item.pr.id] : nil,
+                          merge: showChecks ? store.mergeStatus[item.pr.id] : nil) {
                         open(item.pr)
                     }
                     .padding(.leading, 16)
@@ -306,6 +309,8 @@ private struct PRRow: View {
     /// Spell out the review decision instead of showing just an icon.
     var labeledStatus = false
     var diff: DiffStat?
+    /// Only fetched for your PRs.
+    var merge: MergeStatus?
     let action: () -> Void
     private let panel = PanelState.shared
 
@@ -322,10 +327,14 @@ private struct PRRow: View {
                         .padding(.trailing, 2)
                 }
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(pr.title)
-                        .fontWeight(forYou ? .semibold : .regular)
-                        .foregroundStyle(pr.isDraft ? .secondary : .primary)
-                        .lineLimit(1)
+                    // Checks next to the title as on GitHub, apart from the review decision.
+                    HStack(spacing: 5) {
+                        Text(pr.title)
+                            .fontWeight(forYou ? .semibold : .regular)
+                            .foregroundStyle(pr.isDraft ? .secondary : .primary)
+                            .lineLimit(1)
+                        checks
+                    }
                     subtitle
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -334,6 +343,7 @@ private struct PRRow: View {
                 Spacer(minLength: 6)
                 if forYou { YouBadge() }
                 if pr.isDraft { tag("Draft") }
+                if merge?.conflicting == true { tag("Conflicts", Color.linesRemoved) }
                 decision
             }
             .padding(.horizontal, 6)
@@ -371,13 +381,23 @@ private struct PRRow: View {
         return forYou ? .accentColor.opacity(0.12) : .clear
     }
 
-    private func tag(_ text: String) -> some View {
+    private func tag(_ text: String, _ style: some ShapeStyle = .secondary) -> some View {
         Text(text)
             .font(.caption2)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(style)
             .padding(.horizontal, 5)
             .padding(.vertical, 1)
-            .overlay(Capsule().stroke(.secondary.opacity(0.5)))
+            .overlay(Capsule().stroke(style.opacity(0.5)))
+    }
+
+    /// GitHub's symbols: a check, a cross, or a dot while running.
+    @ViewBuilder private var checks: some View {
+        switch merge?.checks {
+        case .passing: Image(systemName: "checkmark").font(.caption.weight(.bold)).foregroundStyle(Color.linesAdded).help("Checks passed")
+        case .failing: Image(systemName: "xmark").font(.caption.weight(.bold)).foregroundStyle(Color.linesRemoved).help("Checks failed")
+        case .pending: Image(systemName: "circle.fill").font(.system(size: 7)).foregroundStyle(Color.checksPending).help("Checks running")
+        case nil: EmptyView()
+        }
     }
 
     @ViewBuilder private var decision: some View {
@@ -402,6 +422,7 @@ private extension Color {
     // GitHub's diff colors. The system green and red are too light to read on white.
     static let linesAdded = adaptive(light: (0x1A, 0x7F, 0x37), dark: (0x3F, 0xB9, 0x50))
     static let linesRemoved = adaptive(light: (0xCF, 0x22, 0x2E), dark: (0xF8, 0x51, 0x49))
+    static let checksPending = adaptive(light: (0x9A, 0x67, 0x00), dark: (0xD2, 0x99, 0x22))
 
     static func adaptive(light: (Int, Int, Int), dark: (Int, Int, Int)) -> Color {
         Color(nsColor: NSColor(name: nil) { appearance in

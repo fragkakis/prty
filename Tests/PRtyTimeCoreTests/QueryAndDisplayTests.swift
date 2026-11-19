@@ -100,6 +100,25 @@ import Testing
         #expect(Queries.diffStats(["PR_1", "PR_2"]).contains(#"nodes(ids: ["PR_1", "PR_2"])"#))
     }
 
+    @Test func decodesMergeStatus() throws {
+        func node(_ id: String, _ mergeable: String, _ rollup: String?) -> String {
+            let state = rollup.map { #"{"state": "\#($0)"}"# } ?? "null"
+            return #"{"id": "\#(id)", "mergeable": "\#(mergeable)", "commits": {"nodes": [{"commit": {"oid": "h\#(id)", "statusCheckRollup": \#(state)}}]}}"#
+        }
+        let nodes = [
+            node("1", "MERGEABLE", "SUCCESS"), node("2", "CONFLICTING", "FAILURE"), node("3", "UNKNOWN", "ERROR"),
+            node("4", "MERGEABLE", "PENDING"), node("5", "MERGEABLE", "EXPECTED"), node("6", "MERGEABLE", nil), "null",
+        ]
+        let statuses = try MergeStatusResponse.decode(Data(#"{"data": {"nodes": [\#(nodes.joined(separator: ","))]}}"#.utf8)).statuses
+        #expect(statuses.count == 6)
+        #expect(statuses["1"] == MergeStatus(checks: .passing, headOid: "h1"))
+        #expect(statuses["2"] == MergeStatus(checks: .failing, conflicting: true, headOid: "h2"))
+        #expect(statuses["3"] == MergeStatus(checks: .failing, headOid: "h3"))
+        #expect(statuses["4"]?.checks == .pending && statuses["5"]?.checks == .pending)
+        #expect(statuses["6"] == MergeStatus(checks: nil, headOid: "h6"))
+        #expect(Queries.mergeStatus(["PR_1", "PR_2"]).contains(#"nodes(ids: ["PR_1", "PR_2"])"#))
+    }
+
     @Test func statesQueryListsIds() {
         #expect(Queries.states(["PR_1", "PR_2"]).contains(#"nodes(ids: ["PR_1", "PR_2"])"#))
     }
@@ -108,6 +127,7 @@ import Testing
         let json = #"{"prs": {"A": {"seenEventIDs": ["x"], "commitOids": ["c1"]}}, "directRequests": [], "teamRequests": [], "unread": ["A"]}"#
         let snapshot = try JSONDecoder().decode(Snapshot.self, from: Data(json.utf8))
         #expect(snapshot.prs["A"]?.autoMerge == nil)
+        #expect(snapshot.prs["A"]?.checks == nil && snapshot.prs["A"]?.checksOid == nil)
         #expect(snapshot.unread == ["A"])
         #expect(snapshot.unreadSince.isEmpty && snapshot.unreadOnGitHub.isEmpty && snapshot.polledAt == nil)
     }
