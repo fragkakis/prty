@@ -17,6 +17,7 @@ struct SettingsView: View {
     @AppStorage(Prefs.notifyKey(.merged)) private var notifyMerged = true
     @AppStorage(Prefs.notifyKey(.checks)) private var notifyChecks = true
     private let loginItem = LoginItem.shared
+    private let hotKey = HotKey.shared
 
     var body: some View {
         Form {
@@ -31,6 +32,15 @@ struct SettingsView: View {
                     .onChange(of: showLineCounts) { _, on in if on { PRStore.shared.refreshNow() } }
                 Toggle("Show checks and merge conflicts on my PRs", isOn: $showChecks)
                     .onChange(of: showChecks) { _, on in if on { PRStore.shared.refreshNow() } }
+            }
+            Section("Keyboard") {
+                LabeledContent("Open the panel from anywhere") { ShortcutRecorder() }
+                if let error = hotKey.error {
+                    Text(error).font(.caption).foregroundStyle(.red)
+                }
+                Text("In the panel, ↑ and ↓ pick a PR, ↩ opens it, and ⌘1 and ⌘2 switch tabs.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
             Section("Notify me about") {
                 Toggle("Reviews and comments on my PRs", isOn: $notifyMyPRs)
@@ -67,6 +77,28 @@ struct SettingsView: View {
         .formStyle(.grouped)
         .frame(width: 420)
         .fixedSize()
+    }
+}
+
+/// Shows the panel's shortcut; click to type a new one.
+private struct ShortcutRecorder: View {
+    private let hotKey = HotKey.shared
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Button { hotKey.recording.toggle() } label: {
+                Text(hotKey.recording ? "Type a shortcut…" : hotKey.shortcut?.label ?? "Set shortcut")
+                    .frame(minWidth: 100)
+            }
+            .help(hotKey.recording ? "Esc cancels" : "Click, then type the new shortcut")
+            if hotKey.shortcut != nil && !hotKey.recording {
+                Button { hotKey.set(nil) } label: { Image(systemName: "xmark.circle.fill") }
+                    .buttonStyle(.borderless)
+                    .foregroundStyle(.secondary)
+                    .help("Turn off the shortcut")
+                    .accessibilityLabel("Turn off the shortcut")
+            }
+        }
     }
 }
 

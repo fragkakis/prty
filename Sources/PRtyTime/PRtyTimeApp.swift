@@ -29,6 +29,7 @@ struct PRtyTimeApp: App {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         PRStore.shared.start()
+        HotKey.shared.start()
     }
 }
 
@@ -46,6 +47,8 @@ enum Prefs {
     static let showLineCounts = "showLineCounts"
     /// Fetch and show checks and merge conflicts of your PRs.
     static let showChecks = "showChecks"
+    /// The panel's global shortcut (see `Shortcut.plist`); an empty dictionary turns it off.
+    static let hotKey = "hotKey"
 
     static func notifyKey(_ category: NotificationCategory) -> String { "notify.\(category.rawValue)" }
 

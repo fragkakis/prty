@@ -21,6 +21,13 @@ public struct RepoGroup: Sendable, Identifiable {
 
     public var repoName: String { items.first?.pr.repoName ?? repo }
     public var hasForYou: Bool { items.contains(where: \.forYou) }
+
+    /// What the group's collapsed state is saved under: "<section>/<owner>/<repo>".
+    public func key(in section: String) -> String { "\(section)/\(repo)" }
+}
+
+public enum PanelTab: Hashable, Sendable {
+    case review, mine
 }
 
 extension Array where Element == PRItem {
@@ -88,6 +95,39 @@ public struct MenuSections: Sendable {
         toReview.removeAll { snoozed.contains($0.id) }
         reviewed.removeAll { snoozed.contains($0.id) }
         mine.removeAll { snoozed.contains($0.id) }
+    }
+}
+
+extension MenuSections {
+    /// The PRs `tab` shows, top to bottom: the rows ↑ and ↓ move through.
+    /// Collapsed repo groups (keys from `RepoGroup.key(in:)`) and the Snoozed
+    /// list while closed are left out. The section names are MenuContent's.
+    public func rows(_ tab: PanelTab, collapsed: Set<String>, snoozedOpen: Bool) -> [PullRequest] {
+        func shown(_ items: [PRItem], _ section: String) -> [PullRequest] {
+            items.groupedByRepo()
+                .filter { !collapsed.contains($0.key(in: section)) }
+                .flatMap { $0.items.map(\.pr) }
+        }
+        switch tab {
+        case .review:
+            return shown(toReview, "review") + shown(reviewed.map { PRItem(pr: $0) }, "reviewed")
+                + (snoozedOpen ? shown(snoozedReview, "snoozed-review") : [])
+        case .mine:
+            return shown(mine.map { PRItem(pr: $0) }, "mine")
+                + (snoozedOpen ? shown(snoozedMine.map { PRItem(pr: $0) }, "snoozed-mine") : [])
+        }
+    }
+}
+
+extension Array where Element == PullRequest {
+    /// The id of the PR `offset` rows away from the one with id `current`,
+    /// stopping at the first and last. With no current row, or one no longer
+    /// listed, moving down starts at the first and moving up at the last.
+    public func id(movingFrom current: String?, by offset: Int) -> String? {
+        guard let current, let index = firstIndex(where: { $0.id == current }) else {
+            return offset > 0 ? first?.id : last?.id
+        }
+        return self[Swift.min(Swift.max(index + offset, 0), count - 1)].id
     }
 }
 

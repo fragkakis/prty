@@ -20,10 +20,6 @@ struct MenuBarLabel: View {
     }
 }
 
-enum PanelTab: Hashable {
-    case review, mine
-}
-
 /// The panel's view state. With only the Command Line Tools, `@State` doesn't
 /// compile (it is a macro in the macOS 27 SDK and its plugin ships with Xcode),
 /// so view-local state lives here. There is only one panel.
@@ -33,14 +29,57 @@ final class PanelState {
     private static let collapsedKey = "collapsedGroups"
 
     var tab = PanelTab.review
-    var query = ""
-    var hoveredID: String?
+    var query = "" {
+        // A row picked before is no longer what ↩ should open.
+        didSet { if query != oldValue { highlightedID = nil } }
+    }
+    /// The row under the mouse or picked with ↑ and ↓: a PR id, or a repo group's key.
+    var highlightedID: String?
+    /// The PR last picked with ↑ or ↓, for the list to scroll to.
+    var scrollTarget: String?
+    /// Counts the panel opening, for the view to focus the filter.
+    private(set) var openings = 0
+    /// Counts requests to close the panel, which only the view can do (`dismiss`).
+    private(set) var closeRequests = 0
+    @ObservationIgnored weak var window: NSWindow?
+    /// Where the mouse was at the last ↑ or ↓. Hover changes while it's still
+    /// there come from the list scrolling under it, not from the user.
+    @ObservationIgnored private var mouseAtKey: NSPoint?
     var listHeights: [PanelTab: CGFloat] = [:]
     /// Tabs whose Snoozed section is open; closed at launch.
     var snoozedOpen: Set<PanelTab> = []
     /// Collapsed repo groups as "<section>/<owner>/<repo>", kept across launches.
     var collapsed = Set(UserDefaults.standard.stringArray(forKey: PanelState.collapsedKey) ?? []) {
         didSet { UserDefaults.standard.set(collapsed.sorted(), forKey: Self.collapsedKey) }
+    }
+
+    var isOpen: Bool { window?.isVisible == true }
+
+    func opened() {
+        highlightedID = nil
+        mouseAtKey = nil
+        openings += 1
+    }
+
+    func close() { closeRequests += 1 }
+
+    func hover(_ id: String, inside: Bool) {
+        if let point = mouseAtKey {
+            guard NSEvent.mouseLocation != point else { return }
+            mouseAtKey = nil
+        }
+        if inside {
+            highlightedID = id
+        } else if highlightedID == id {
+            highlightedID = nil
+        }
+    }
+
+    /// Highlights the PR picked with ↑ or ↓.
+    func pick(_ id: String?) {
+        highlightedID = id
+        scrollTarget = id
+        mouseAtKey = NSEvent.mouseLocation
     }
 }
 
@@ -53,14 +92,17 @@ struct MenuContent: View {
     @AppStorage(Prefs.showChecks) private var showChecks = false
     @Environment(\.openSettings) private var openSettings
     @Environment(\.dismiss) private var dismiss
+    @FocusState private var filterFocused: Bool
     private let panel = PanelState.shared
 
     var body: some View {
         let all = MenuSections(buckets: store.buckets, staleDays: staleDays, hideBots: ignoreBots, snoozed: Set(store.snoozed.keys))
         let shown = filtering ? all.filtered(panel.query) : all
+        let rows = shown.rows(panel.tab, collapsed: filtering ? [] : panel.collapsed, snoozedOpen: filtering || panel.snoozedOpen.contains(panel.tab))
+        let selected = selection(in: rows)
 
         VStack(spacing: 0) {
-            filterField
+            filterField(rows: rows, selected: selected)
                 .padding([.horizontal, .top], 10)
             Picker("", selection: Binding(get: { panel.tab }, set: { panel.tab = $0 })) {
                 Text("To review (\(shown.toReview.count))").tag(PanelTab.review)
@@ -68,6 +110,14 @@ struct MenuContent: View {
             }
             .pickerStyle(.segmented)
             .labelsHidden()
+            .help("⌘1 and ⌘2 switch tabs")
+            .background {
+                Group {
+                    Button("To review") { panel.tab = .review }.keyboardShortcut("1")
+                    Button("My PRs") { panel.tab = .mine }.keyboardShortcut("2")
+                }
+                .hidden()
+            }
             .padding(10)
 
             if let error = store.errorMessage { banner(error) }
@@ -79,35 +129,68 @@ struct MenuContent: View {
             // filtering never resizes the panel. MenuBarExtra resizes around the
             // center, which would move it away from the menu bar.
             // While filtering, every group is expanded so no match is hidden.
-            ScrollView { list(panel.tab, shown, expandAll: filtering) }
-                .frame(height: min(max(panel.listHeights.values.max() ?? 0, 1), 520))
-                .background {
-                    VStack {
-                        measured(.review, all)
-                        measured(.mine, all)
-                    }
-                    .hidden()
+            ScrollViewReader { proxy in
+                ScrollView {
+                    list(panel.tab, shown, expandAll: filtering)
+                        .environment(\.selectedRow, selected?.id)
                 }
+                .onChange(of: panel.scrollTarget) { _, id in
+                    if let id { proxy.scrollTo(id) }
+                }
+            }
+            .frame(height: min(max(panel.listHeights.values.max() ?? 0, 1), 520))
+            .background {
+                VStack {
+                    measured(.review, all)
+                    measured(.mine, all)
+                }
+                .hidden()
+            }
             Divider()
             footer
         }
         .frame(width: 460)
         .pinTopOnResize()
+        .background(PanelWindowReader())
+        // Also when opened with a click, so ↑ and ↓ work right away. A query
+        // kept from last time is selected, so typing replaces it.
+        .onChange(of: panel.openings) {
+            filterFocused = true
+            DispatchQueue.main.async { NSApp.sendAction(#selector(NSText.selectAll(_:)), to: nil, from: nil) }
+        }
+        .onChange(of: panel.closeRequests) { dismiss() }
     }
 
     private var filtering: Bool { !panel.query.trimmingCharacters(in: .whitespaces).isEmpty }
 
-    private var filterField: some View {
+    /// The PR ↩ opens: the highlighted one, or while filtering the first match.
+    private func selection(in rows: [PullRequest]) -> PullRequest? {
+        rows.first { $0.id == panel.highlightedID } ?? (filtering ? rows.first : nil)
+    }
+
+    private func filterField(rows: [PullRequest], selected: PullRequest?) -> some View {
         HStack(spacing: 6) {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(.secondary)
             TextField("Filter by #, title, repo, author, reviewer", text: Binding(get: { panel.query }, set: { panel.query = $0 }))
                 .textFieldStyle(.plain)
+                .focused($filterFocused)
                 .onKeyPress(.escape) {
                     // Esc clears the filter; with nothing to clear, let it close the panel.
                     guard !panel.query.isEmpty else { return .ignored }
                     panel.query = ""
                     return .handled
+                }
+                .onKeyPress(.downArrow) {
+                    panel.pick(rows.id(movingFrom: selected?.id, by: 1))
+                    return .handled
+                }
+                .onKeyPress(.upArrow) {
+                    panel.pick(rows.id(movingFrom: selected?.id, by: -1))
+                    return .handled
+                }
+                .onSubmit {
+                    if let selected { open(selected) }
                 }
             if !panel.query.isEmpty {
                 Button { panel.query = "" } label: { Image(systemName: "xmark.circle.fill") }
@@ -196,7 +279,7 @@ struct MenuContent: View {
     /// Collapsible per-repo groups. `section` keeps collapse state separate per list.
     private func groups(_ items: [PRItem], section: String, mine: Bool = false, expandAll: Bool) -> some View {
         ForEach(items.groupedByRepo()) { group in
-            let key = "\(section)/\(group.repo)"
+            let key = group.key(in: section)
             let collapsed = !expandAll && panel.collapsed.contains(key)
             GroupHeader(group: group, key: key, collapsed: collapsed, collapsible: !expandAll, hasUnread: group.items.contains { isUnread($0.pr) })
             if !collapsed {
@@ -209,6 +292,7 @@ struct MenuContent: View {
                     }
                     .contextMenu { snoozeMenu(item.pr) }
                     .padding(.leading, 16)
+                    .id(item.pr.id)
                 }
             }
         }
@@ -297,7 +381,7 @@ private struct GroupHeader: View {
     let hasUnread: Bool
     private let panel = PanelState.shared
 
-    private var hovering: Bool { panel.hoveredID == key }
+    private var hovering: Bool { panel.highlightedID == key }
 
     var body: some View {
         Button {
@@ -331,13 +415,7 @@ private struct GroupHeader: View {
         .buttonStyle(.plain)
         .allowsHitTesting(collapsible)
         .padding(.top, 4)
-        .onHover { inside in
-            if inside {
-                panel.hoveredID = key
-            } else if hovering {
-                panel.hoveredID = nil
-            }
-        }
+        .onHover { panel.hover(key, inside: $0) }
         .help(group.repo)
     }
 }
@@ -365,9 +443,8 @@ private struct PRRow: View {
     var merge: MergeStatus?
     var snoozedUntil: Date?
     let action: () -> Void
+    @Environment(\.selectedRow) private var selectedRow
     private let panel = PanelState.shared
-
-    private var hovering: Bool { panel.hoveredID == pr.id }
 
     var body: some View {
         Button(action: action) {
@@ -405,13 +482,7 @@ private struct PRRow: View {
             .background(background, in: RoundedRectangle(cornerRadius: 6))
         }
         .buttonStyle(.plain)
-        .onHover { inside in
-            if inside {
-                panel.hoveredID = pr.id
-            } else if hovering {
-                panel.hoveredID = nil
-            }
-        }
+        .onHover { panel.hover(pr.id, inside: $0) }
         .help(pr.title)
     }
 
@@ -433,7 +504,7 @@ private struct PRRow: View {
     }
 
     private var background: Color {
-        if hovering { return .primary.opacity(0.1) }
+        if selectedRow == pr.id { return .primary.opacity(0.1) }
         return forYou ? .accentColor.opacity(0.12) : .clear
     }
 
@@ -485,6 +556,37 @@ private extension Color {
             let (r, g, b) = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? dark : light
             return NSColor(srgbRed: CGFloat(r) / 255, green: CGFloat(g) / 255, blue: CGFloat(b) / 255, alpha: 1)
         })
+    }
+}
+
+extension EnvironmentValues {
+    /// The id of the PR row that ↩ opens, highlighted.
+    var selectedRow: String? {
+        get { self[SelectedRowKey.self] }
+        set { self[SelectedRowKey.self] = newValue }
+    }
+}
+
+private struct SelectedRowKey: EnvironmentKey {
+    static let defaultValue: String? = nil
+}
+
+/// Gives `PanelState` the panel's window, and tells it when the panel opens.
+private struct PanelWindowReader: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView { WindowView() }
+    func updateNSView(_ view: NSView, context: Context) {}
+
+    final class WindowView: NSView {
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            NotificationCenter.default.removeObserver(self)
+            guard let window else { return }
+            PanelState.shared.window = window
+            NotificationCenter.default.addObserver(self, selector: #selector(becameKey), name: NSWindow.didBecomeKeyNotification, object: window)
+            if window.isKeyWindow { becameKey() }
+        }
+
+        @objc private func becameKey() { PanelState.shared.opened() }
     }
 }
 

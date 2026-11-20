@@ -16,6 +16,7 @@ A macOS menu-bar app that lists the GitHub pull requests waiting on you, and not
 - **Grouped by repo:** click a repo to collapse it; remembered across launches.
 - **Snooze:** right-click a PR to hide it until there's new activity, tomorrow morning or next week. It waits, dimmed, in a *Snoozed* section at the bottom of its tab and leaves the badge. Anything that would give it a blue dot brings it back early, as do failing checks on your own PRs.
 - **Filter:** type to filter by number (`#123`), title, repo, author or reviewer. Every word must match.
+- **Keyboard:** ⌃⌥P opens the panel from any app with the filter ready to type in (change or turn off the shortcut in Settings). ↑ and ↓ pick a PR, ↩ opens it (while filtering, the first match without picking), ⌘1 and ⌘2 switch tabs, and Esc clears the filter, then closes.
 - **Unread dots:** a blue dot marks new activity you haven't opened. It clears when you open the PR from the panel or its notification, or read it on GitHub (synced through your GitHub notifications). Activity GitHub doesn't notify you about, such as pushes, only clears from PRty Time.
 - **At a glance:** each row shows the author's avatar and the lines added and removed (the counts can be turned off in Settings).
 - **Checks and conflicts** (off by default, turn on in Settings): your PRs show whether their checks passed, failed or are still running, and a *Conflicts* tag when they can't merge cleanly.
