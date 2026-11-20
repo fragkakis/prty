@@ -4,6 +4,8 @@
 
 A macOS menu-bar app that lists the GitHub pull requests waiting on you, and notifies you when something happens on them. A small replacement for [Trailer](https://github.com/ptsochantaris/trailer).
 
+<img src="docs/demo.gif" width="500" alt="Opening the panel with ⌃⌥P, filtering by typing, picking a PR with the arrow keys and switching tabs with ⌘2">
+
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/screenshot-dark.png">
   <img src="docs/screenshot-light.png" alt="The PRty Time panel, showing the To review and My PRs tabs">

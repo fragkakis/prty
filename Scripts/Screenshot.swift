@@ -1,15 +1,19 @@
 import AppKit
+import ImageIO
 import PRtyTimeCore
 import SwiftUI
+import UniformTypeIdentifiers
 
-// Renders docs/screenshot-{light,dark}.png from demo data. Not part of the build; to use it:
+// Renders docs/screenshot-{light,dark}.png, docs/demo.gif (the keyboard flow) and
+// docs/social-preview.png (upload it in the repo's Settings → Social preview) from
+// demo data. Not part of the build; to use it:
 // 1. Copy this file into Sources/PRtyTime/.
 // 2. In PRStore.swift, drop `private(set)` from buckets, unread, lastRefresh and diffStats;
 //    in Avatar.swift, from AvatarStore.images.
 // 3. Start AppDelegate.applicationDidFinishLaunching with
 //    `if let dir = ProcessInfo.processInfo.environment["PRTY_SHOT"] { Screenshot.run(to: dir); return }`
 // 4. `make bundle`, then `PRTY_SHOT=<dir> ".build/PRty Time.app/Contents/MacOS/PRtyTime"`.
-// 5. Copy the PNGs to docs/ and revert steps 1-3.
+// 5. Copy the images to docs/ and revert steps 1-3.
 @MainActor
 enum Screenshot {
     static func run(to dir: String) {
@@ -47,7 +51,8 @@ enum Screenshot {
             ],
         ]
         store.unread = ["d1", "t2", "m1"]
-        store.lastRefresh = now.addingTimeInterval(-30)
+        // A daytime clock in the footer, whenever this runs. Ages use `updatedAt`, not this.
+        store.lastRefresh = Calendar.current.date(bySettingHour: 10, minute: 42, second: 0, of: now)
         let counts: [String: (Int, Int)] = [
             "d1": (148, 12), "d2": (6, 9), "t1": (2, 2), "t2": (1_240, 310), "t3": (87, 45), "t4": (214, 36),
             "r1": (64, 8), "m1": (96, 14), "m2": (41, 17), "m3": (12, 1_870), "m4": (230, 0),
@@ -67,6 +72,8 @@ enum Screenshot {
                 let png = compose(shots, dark: name == "dark")
                 try? png.write(to: URL(fileURLWithPath: dir).appendingPathComponent("screenshot-\(name).png"))
             }
+            await demo(to: dir)
+            await socialPreview(to: dir)
             NSApp.terminate(nil)
         }
     }
@@ -123,6 +130,123 @@ enum Screenshot {
         let image = NSImage(size: size)
         image.addRepresentation(rep)
         return image
+    }
+
+    /// The keyboard flow, a frame per step with the keys as its caption.
+    static func demo(to dir: String) async {
+        let panel = PanelState.shared
+        panel.tab = .review
+        let steps: [(caption: String, seconds: Double, set: () -> Void)] = [
+            ("⌃⌥P opens the panel from any app", 2.0, { panel.query = "" }),
+            ("Type to filter", 0.3, { panel.query = "p" }),
+            ("Type to filter", 0.3, { panel.query = "po" }),
+            ("Type to filter", 0.3, { panel.query = "pos" }),
+            ("Type to filter", 0.6, { panel.query = "post" }),
+            ("↩ opens the first match", 1.8, {}),
+            ("Esc clears the filter", 1.2, { panel.query = "" }),
+            ("↓ and ↑ pick a PR", 0.6, { panel.highlightedID = "d1" }),
+            ("↓ and ↑ pick a PR", 0.6, { panel.highlightedID = "t1" }),
+            ("↓ and ↑ pick a PR", 1.2, { panel.highlightedID = "d2" }),
+            ("⌘2 switches tabs", 2.2, { panel.highlightedID = nil; panel.tab = .mine }),
+        ]
+        var frames: [(CGImage, Double)] = []
+        for step in steps {
+            step.set()
+            frames.append((frame(await render(.aqua), caption: step.caption), step.seconds))
+        }
+        panel.tab = .review
+        let url = URL(fileURLWithPath: dir).appendingPathComponent("demo.gif")
+        guard let gif = CGImageDestinationCreateWithURL(url as CFURL, UTType.gif.identifier as CFString, frames.count, nil) else { return }
+        CGImageDestinationSetProperties(gif, [kCGImagePropertyGIFDictionary: [kCGImagePropertyGIFLoopCount: 0]] as CFDictionary)
+        for (image, seconds) in frames {
+            CGImageDestinationAddImage(gif, image, [kCGImagePropertyGIFDictionary: [kCGImagePropertyGIFDelayTime: seconds]] as CFDictionary)
+        }
+        CGImageDestinationFinalize(gif)
+    }
+
+    /// The panel on a plain background with a caption under it, at 2x. Opaque
+    /// and without a shadow: GIFs have 256 colors and no partial transparency.
+    static func frame(_ panel: NSImage, caption: String) -> CGImage {
+        let pad: CGFloat = 20, captionHeight: CGFloat = 48, radius: CGFloat = 12
+        let size = NSSize(width: panel.size.width + 2 * pad, height: panel.size.height + pad + captionHeight)
+        let rep = NSBitmapImageRep(
+            bitmapDataPlanes: nil, pixelsWide: Int(size.width * 2), pixelsHigh: Int(size.height * 2), bitsPerSample: 8,
+            samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0
+        )!
+        rep.size = size
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+        NSColor(white: 0.92, alpha: 1).setFill()
+        NSRect(origin: .zero, size: size).fill()
+        let rect = NSRect(x: pad, y: captionHeight, width: panel.size.width, height: panel.size.height)
+        let shape = NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius)
+        NSGraphicsContext.saveGraphicsState()
+        shape.addClip()
+        panel.draw(in: rect)
+        NSGraphicsContext.restoreGraphicsState()
+        NSColor.black.withAlphaComponent(0.15).setStroke()
+        shape.lineWidth = 0.5
+        shape.stroke()
+        let style = NSMutableParagraphStyle()
+        style.alignment = .center
+        let text = NSAttributedString(string: caption, attributes: [
+            .font: NSFont.systemFont(ofSize: 16, weight: .medium),
+            .foregroundColor: NSColor(white: 0.2, alpha: 1),
+            .paragraphStyle: style,
+        ])
+        text.draw(in: NSRect(x: 0, y: (captionHeight - 22) / 2, width: size.width, height: 22))
+        NSGraphicsContext.restoreGraphicsState()
+        return rep.cgImage!
+    }
+
+    /// 1280x640, GitHub's size for a repo's social preview.
+    static func socialPreview(to dir: String) async {
+        let panel = PanelState.shared
+        panel.tab = .review
+        panel.query = ""
+        let shot = await render(.aqua)
+        let size = NSSize(width: 1280, height: 640)
+        let rep = NSBitmapImageRep(
+            bitmapDataPlanes: nil, pixelsWide: Int(size.width), pixelsHigh: Int(size.height), bitsPerSample: 8,
+            samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0
+        )!
+        rep.size = size
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+        NSGradient(starting: NSColor(srgbRed: 0.96, green: 0.97, blue: 0.99, alpha: 1), ending: NSColor(srgbRed: 0.86, green: 0.89, blue: 0.94, alpha: 1))!
+            .draw(in: NSRect(origin: .zero, size: size), angle: -90)
+
+        // The panel on the right, cut off at the bottom edge like a menu bar's drop-down.
+        let scale: CGFloat = 1.1
+        let panelSize = NSSize(width: shot.size.width * scale, height: shot.size.height * scale)
+        let rect = NSRect(x: size.width - 64 - panelSize.width, y: size.height - 56 - panelSize.height, width: panelSize.width, height: panelSize.height)
+        let shape = NSBezierPath(roundedRect: rect, xRadius: 14, yRadius: 14)
+        NSGraphicsContext.saveGraphicsState()
+        let shadow = NSShadow()
+        shadow.shadowColor = .black.withAlphaComponent(0.25)
+        shadow.shadowBlurRadius = 30
+        shadow.shadowOffset = NSSize(width: 0, height: -10)
+        shadow.set()
+        NSColor.white.setFill()
+        shape.fill()
+        NSGraphicsContext.restoreGraphicsState()
+        NSGraphicsContext.saveGraphicsState()
+        shape.addClip()
+        shot.draw(in: rect)
+        NSGraphicsContext.restoreGraphicsState()
+
+        let left: CGFloat = 80, width = rect.minX - left - 56
+        NSApp.applicationIconImage.draw(in: NSRect(x: left - 12, y: 400, width: 160, height: 160))
+        func text(_ string: String, _ font: NSFont, _ color: NSColor, in frame: NSRect) {
+            NSAttributedString(string: string, attributes: [.font: font, .foregroundColor: color]).draw(in: frame)
+        }
+        text("PRty Time", .systemFont(ofSize: 68, weight: .bold), NSColor(white: 0.1, alpha: 1), in: NSRect(x: left, y: 300, width: width, height: 84))
+        text("The GitHub pull requests waiting on you, in your Mac's menu bar.", .systemFont(ofSize: 30, weight: .regular),
+             NSColor(white: 0.3, alpha: 1), in: NSRect(x: left, y: 170, width: width, height: 120))
+        text("Free and open source for macOS", .systemFont(ofSize: 22, weight: .medium), NSColor(white: 0.45, alpha: 1),
+             in: NSRect(x: left, y: 140, width: width, height: 30))
+        NSGraphicsContext.restoreGraphicsState()
+        try? rep.representation(using: .png, properties: [:])!.write(to: URL(fileURLWithPath: dir).appendingPathComponent("social-preview.png"))
     }
 
     /// Both panels side by side with rounded corners and a shadow, at 2x.
