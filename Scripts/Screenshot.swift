@@ -4,7 +4,7 @@ import PRtyTimeCore
 import SwiftUI
 import UniformTypeIdentifiers
 
-// Renders docs/screenshot-{light,dark}.png, docs/demo.gif (the keyboard flow) and
+// Renders the README's docs/demo-{light,dark}.gif (the keyboard flow) and
 // docs/social-preview.png (upload it in the repo's Settings → Social preview) from
 // demo data. Not part of the build; to use it:
 // 1. Copy this file into Sources/PRtyTime/.
@@ -63,16 +63,8 @@ enum Screenshot {
         }
 
         Task {
-            for (name, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] {
-                var shots: [NSImage] = []
-                for tab in [PanelTab.review, .mine] {
-                    PanelState.shared.tab = tab
-                    shots.append(await render(appearance))
-                }
-                let png = compose(shots, dark: name == "dark")
-                try? png.write(to: URL(fileURLWithPath: dir).appendingPathComponent("screenshot-\(name).png"))
-            }
-            await demo(to: dir)
+            await demo(.aqua, to: URL(fileURLWithPath: dir).appendingPathComponent("demo-light.gif"))
+            await demo(.darkAqua, to: URL(fileURLWithPath: dir).appendingPathComponent("demo-dark.gif"))
             await socialPreview(to: dir)
             NSApp.terminate(nil)
         }
@@ -133,7 +125,7 @@ enum Screenshot {
     }
 
     /// The keyboard flow, a frame per step with the keys as its caption.
-    static func demo(to dir: String) async {
+    static func demo(_ appearance: NSAppearance.Name, to url: URL) async {
         let panel = PanelState.shared
         panel.tab = .review
         let steps: [(caption: String, seconds: Double, set: () -> Void)] = [
@@ -152,10 +144,9 @@ enum Screenshot {
         var frames: [(CGImage, Double)] = []
         for step in steps {
             step.set()
-            frames.append((frame(await render(.aqua), caption: step.caption), step.seconds))
+            frames.append((frame(await render(appearance), caption: step.caption, dark: appearance == .darkAqua), step.seconds))
         }
         panel.tab = .review
-        let url = URL(fileURLWithPath: dir).appendingPathComponent("demo.gif")
         guard let gif = CGImageDestinationCreateWithURL(url as CFURL, UTType.gif.identifier as CFString, frames.count, nil) else { return }
         CGImageDestinationSetProperties(gif, [kCGImagePropertyGIFDictionary: [kCGImagePropertyGIFLoopCount: 0]] as CFDictionary)
         for (image, seconds) in frames {
@@ -166,7 +157,7 @@ enum Screenshot {
 
     /// The panel on a plain background with a caption under it, at 2x. Opaque
     /// and without a shadow: GIFs have 256 colors and no partial transparency.
-    static func frame(_ panel: NSImage, caption: String) -> CGImage {
+    static func frame(_ panel: NSImage, caption: String, dark: Bool) -> CGImage {
         let pad: CGFloat = 20, captionHeight: CGFloat = 48, radius: CGFloat = 12
         let size = NSSize(width: panel.size.width + 2 * pad, height: panel.size.height + pad + captionHeight)
         let rep = NSBitmapImageRep(
@@ -176,7 +167,7 @@ enum Screenshot {
         rep.size = size
         NSGraphicsContext.saveGraphicsState()
         NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
-        NSColor(white: 0.92, alpha: 1).setFill()
+        NSColor(white: dark ? 0.1 : 0.92, alpha: 1).setFill()
         NSRect(origin: .zero, size: size).fill()
         let rect = NSRect(x: pad, y: captionHeight, width: panel.size.width, height: panel.size.height)
         let shape = NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius)
@@ -184,14 +175,14 @@ enum Screenshot {
         shape.addClip()
         panel.draw(in: rect)
         NSGraphicsContext.restoreGraphicsState()
-        NSColor.black.withAlphaComponent(0.15).setStroke()
+        (dark ? NSColor.white.withAlphaComponent(0.16) : NSColor.black.withAlphaComponent(0.15)).setStroke()
         shape.lineWidth = 0.5
         shape.stroke()
         let style = NSMutableParagraphStyle()
         style.alignment = .center
         let text = NSAttributedString(string: caption, attributes: [
             .font: NSFont.systemFont(ofSize: 16, weight: .medium),
-            .foregroundColor: NSColor(white: 0.2, alpha: 1),
+            .foregroundColor: NSColor(white: dark ? 0.85 : 0.2, alpha: 1),
             .paragraphStyle: style,
         ])
         text.draw(in: NSRect(x: 0, y: (captionHeight - 22) / 2, width: size.width, height: 22))
@@ -247,48 +238,5 @@ enum Screenshot {
              in: NSRect(x: left, y: 140, width: width, height: 30))
         NSGraphicsContext.restoreGraphicsState()
         try? rep.representation(using: .png, properties: [:])!.write(to: URL(fileURLWithPath: dir).appendingPathComponent("social-preview.png"))
-    }
-
-    /// Both panels side by side with rounded corners and a shadow, at 2x.
-    static func compose(_ panels: [NSImage], dark: Bool) -> Data {
-        let pad: CGFloat = 36, gap: CGFloat = 28, radius: CGFloat = 12
-        let height = panels.map(\.size.height).max()! + 2 * pad
-        let width = panels.map(\.size.width).reduce(0, +) + gap * CGFloat(panels.count - 1) + 2 * pad
-        let rep = NSBitmapImageRep(
-            bitmapDataPlanes: nil, pixelsWide: Int(width * 2), pixelsHigh: Int(height * 2), bitsPerSample: 8,
-            samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0
-        )!
-        NSGraphicsContext.saveGraphicsState()
-        NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
-        let scale = NSAffineTransform()
-        scale.scale(by: 2)
-        scale.concat()
-        var x = pad
-        for panel in panels {
-            let rect = NSRect(x: x, y: height - pad - panel.size.height, width: panel.size.width, height: panel.size.height)
-            let shape = NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius)
-            NSGraphicsContext.saveGraphicsState()
-            let shadow = NSShadow()
-            shadow.shadowColor = .black.withAlphaComponent(dark ? 0.5 : 0.22)
-            shadow.shadowBlurRadius = 22
-            shadow.shadowOffset = NSSize(width: 0, height: -8)
-            shadow.set()
-            NSColor.black.setFill()
-            shape.fill()
-            NSGraphicsContext.restoreGraphicsState()
-
-            NSGraphicsContext.saveGraphicsState()
-            shape.addClip()
-            panel.draw(in: rect)
-            NSGraphicsContext.restoreGraphicsState()
-
-            (dark ? NSColor.white.withAlphaComponent(0.16) : NSColor.black.withAlphaComponent(0.12)).setStroke()
-            let border = NSBezierPath(roundedRect: rect.insetBy(dx: 0.25, dy: 0.25), xRadius: radius, yRadius: radius)
-            border.lineWidth = 0.5
-            border.stroke()
-            x += panel.size.width + gap
-        }
-        NSGraphicsContext.restoreGraphicsState()
-        return rep.representation(using: .png, properties: [:])!
     }
 }
