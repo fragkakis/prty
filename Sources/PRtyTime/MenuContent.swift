@@ -147,6 +147,7 @@ struct MenuContent: View {
                 .hidden()
             }
             Divider()
+            if let update = store.update { updateRow(update) }
             footer
         }
         .frame(width: 460)
@@ -345,6 +346,19 @@ struct MenuContent: View {
     private func open(_ pr: PullRequest) {
         store.open(pr)
         dismiss()
+    }
+
+    private func updateRow(_ release: Release) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: "arrow.down.circle")
+            Text("PRty Time \(release.version) is available")
+            Spacer()
+            UpdateButton(release: release) { dismiss() }
+        }
+        .font(.caption)
+        .buttonStyle(.borderless)
+        .padding(.horizontal, 12)
+        .padding(.top, 8)
     }
 
     private func banner(_ text: String) -> some View {

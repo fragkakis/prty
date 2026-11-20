@@ -35,4 +35,6 @@ To check without waiting for a notification, render `[[ISIcon alloc] initWithBun
 3. `.github/workflows/release.yml` builds the universal zip (version taken from the tag), creates the release with notes from `Scripts/release-changes.sh` (commit subjects since the last tag, minus chore/docs/test/ci, so write them for users) above `.github/release-notes.md`, and updates `Casks/prty-time.rb` in `fragkakis/homebrew-tap` through the `TAP_DEPLOY_KEY` secret (a deploy key with write access).
 4. Check with `gh run watch`, then that the cask's `sha256` matches the release asset.
 
+The app's daily update check reads `releases/latest`, so drafts and prereleases don't reach users.
+
 The app is ad-hoc signed, not notarized, so users click Open Anyway on first launch. The official homebrew/cask repo would need notarization (Developer ID).

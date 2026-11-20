@@ -11,6 +11,7 @@ struct SettingsView: View {
     @AppStorage(Prefs.ignoreBots) private var ignoreBots = true
     @AppStorage(Prefs.showLineCounts) private var showLineCounts = true
     @AppStorage(Prefs.showChecks) private var showChecks = false
+    @AppStorage(Prefs.checkUpdates) private var checkUpdates = true
     @AppStorage(Prefs.notifyKey(.myPRs)) private var notifyMyPRs = true
     @AppStorage(Prefs.notifyKey(.reviewRequests)) private var notifyRequests = true
     @AppStorage(Prefs.notifyKey(.reviewing)) private var notifyReviewing = true
@@ -18,6 +19,7 @@ struct SettingsView: View {
     @AppStorage(Prefs.notifyKey(.checks)) private var notifyChecks = true
     private let loginItem = LoginItem.shared
     private let hotKey = HotKey.shared
+    private let store = PRStore.shared
 
     var body: some View {
         Form {
@@ -72,6 +74,15 @@ struct SettingsView: View {
                     }
                     .help(AppInfo.repo.absoluteString)
                 }
+                if let update = store.update {
+                    HStack {
+                        Text("Version \(update.version) is available")
+                        Spacer()
+                        UpdateButton(release: update)
+                    }
+                }
+                Toggle("Check for updates daily", isOn: $checkUpdates)
+                    .onChange(of: checkUpdates) { _, on in store.updateChecksChanged(on) }
             }
         }
         .formStyle(.grouped)

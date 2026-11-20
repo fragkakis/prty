@@ -47,6 +47,8 @@ enum Prefs {
     static let showLineCounts = "showLineCounts"
     /// Fetch and show checks and merge conflicts of your PRs.
     static let showChecks = "showChecks"
+    /// Look for a newer release once a day.
+    static let checkUpdates = "checkUpdates"
     /// The panel's global shortcut (see `Shortcut.plist`); an empty dictionary turns it off.
     static let hotKey = "hotKey"
 
@@ -59,7 +61,7 @@ enum Prefs {
     }
 
     static func registerDefaults() {
-        var defaults: [String: Any] = [pollMinutes: 2.0, staleDays: 30, ignoreBots: true, showLineCounts: true, showChecks: false]
+        var defaults: [String: Any] = [pollMinutes: 2.0, staleDays: 30, ignoreBots: true, showLineCounts: true, showChecks: false, checkUpdates: true]
         for category in NotificationCategory.allCases { defaults[notifyKey(category)] = true }
         UserDefaults.standard.register(defaults: defaults)
     }

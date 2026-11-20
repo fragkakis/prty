@@ -24,6 +24,14 @@ final class PRStore {
         didSet { UserDefaults.standard.set(snoozed, forKey: Self.snoozedKey) }
     }
     private static let snoozedKey = "snoozed"
+    /// A release newer than this app, kept until the app is updated.
+    private(set) var update: Release? {
+        didSet { UserDefaults.standard.set(update.map { ["version": $0.version, "url": $0.url.absoluteString] }, forKey: Self.updateKey) }
+    }
+    private static let updateKey = "availableUpdate"
+    private static let updateCheckedKey = "updateCheckedAt"
+    /// The release last notified about, so each one is notified once.
+    private static let notifiedUpdateKey = "notifiedUpdate"
 
     @ObservationIgnored private var snapshot: Snapshot?
     @ObservationIgnored private let client = GitHubClient()
@@ -38,6 +46,8 @@ final class PRStore {
     func start() {
         snapshot = stateStore.load()
         unread = snapshot?.unread ?? []
+        // Drops a saved release that's no longer newer: the app was updated.
+        update = UserDefaults.standard.bool(forKey: Prefs.checkUpdates) ? Self.savedUpdate() : nil
         notifier.onOpen = { [weak self] id in self?.markRead(id) }
         notifier.activate()
         NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { _ in
@@ -68,6 +78,16 @@ final class PRStore {
 
     func unsnooze(_ id: String) {
         snoozed[id] = nil
+    }
+
+    /// After the Settings toggle: turned on, checks now; turned off, forgets the release found.
+    func updateChecksChanged(_ on: Bool) {
+        guard on else {
+            update = nil
+            return
+        }
+        UserDefaults.standard.removeObject(forKey: Self.updateCheckedKey)
+        Task { await checkForUpdate() }
     }
 
     func markRead(_ id: String) {
@@ -155,6 +175,7 @@ final class PRStore {
             let diffsFetched = await refreshDiffStats(for: shown.toReview.map(\.pr) + shown.reviewed + shown.mine)
 
             let duration = String(format: "%.1f", Date().timeIntervalSince(started))
+            await checkForUpdate()
             log.notice("poll ok: requests=\(result.requests) closed=\(data.closed.count) readOnGitHub=\(readOnGitHub) cost=\(result.cost) remaining=\(result.rateLimit?.remaining ?? -1) diffs=\(diffsFetched) checks=\(data.mergeStatus?.count ?? -1) duration=\(duration, privacy: .public)s notifications=\(diff.notifications.count)")
 
             if let limit = result.rateLimit, limit.remaining < 200 {
@@ -188,6 +209,37 @@ final class PRStore {
             log.error("fetching line counts for \(stale.count) PRs failed: \(error.localizedDescription, privacy: .public)")
         }
         return stale.count
+    }
+
+    /// Looks for a newer release once a day (after a poll, when the network is
+    /// up) and notifies about each new one once.
+    private func checkForUpdate() async {
+        let defaults = UserDefaults.standard
+        guard defaults.bool(forKey: Prefs.checkUpdates),
+              UpdateCheck.isDue(lastChecked: defaults.object(forKey: Self.updateCheckedKey) as? Date)
+        else { return }
+        // Also when it fails, so a failing check is retried tomorrow, not every poll.
+        defaults.set(Date(), forKey: Self.updateCheckedKey)
+        do {
+            let latest = try await client.latestRelease()
+            update = UpdateCheck.isNewer(latest.version, than: AppInfo.version) ? latest : nil
+            if let update, defaults.string(forKey: Self.notifiedUpdateKey) != update.version {
+                notifier.postUpdate(update)
+                defaults.set(update.version, forKey: Self.notifiedUpdateKey)
+            }
+            log.notice("update check: latest=\(latest.version, privacy: .public) running=\(AppInfo.version, privacy: .public)")
+        } catch {
+            log.error("update check failed: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    private static func savedUpdate() -> Release? {
+        guard let saved = UserDefaults.standard.dictionary(forKey: updateKey),
+              let version = saved["version"] as? String,
+              let url = (saved["url"] as? String).flatMap(URL.init(string:)),
+              UpdateCheck.isNewer(version, than: AppInfo.version)
+        else { return nil }
+        return Release(version: version, url: url)
     }
 
     private func persist() {

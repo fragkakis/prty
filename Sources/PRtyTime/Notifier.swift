@@ -30,6 +30,18 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         center.add(UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil))
     }
 
+    /// Clicking it opens the release page.
+    func postUpdate(_ release: Release) {
+        guard let center else { return }
+        let content = UNMutableNotificationContent()
+        content.title = "PRty Time \(release.version) is available"
+        content.body = UpdateHelp.shared.viaHomebrew ? "Update with: \(UpdateHelp.brewCommand)" : "Click to download it."
+        content.sound = .default
+        content.threadIdentifier = "update"
+        content.userInfo = ["url": release.url.absoluteString]
+        center.add(UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil))
+    }
+
     nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification) async -> UNNotificationPresentationOptions {
         [.banner, .sound]
     }

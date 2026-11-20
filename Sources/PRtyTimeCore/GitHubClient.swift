@@ -212,6 +212,15 @@ public actor GitHubClient {
         return threads
     }
 
+    /// The latest PRty Time release, leaving out drafts and prereleases. REST,
+    /// so it doesn't use GraphQL points.
+    public func latestRelease() async throws -> Release {
+        var request = URLRequest(url: URL(string: "https://api.github.com/repos/fragkakis/prty-time/releases/latest")!, timeoutInterval: 30)
+        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        request.setValue(Self.restAPIVersion, forHTTPHeaderField: "X-GitHub-Api-Version")
+        return try Release.decode(try await perform(request).0)
+    }
+
     /// The rel="next" URL of a `Link` header.
     static func nextPage(_ link: String?) -> URL? {
         guard let part = link?.split(separator: ",").first(where: { $0.contains(#"rel="next""#) }),
