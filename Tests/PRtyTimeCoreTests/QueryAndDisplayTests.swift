@@ -93,11 +93,17 @@ import Testing
         #expect(!closed[1].merged)
     }
 
-    @Test func decodesDiffStatsSkippingUnresolved() throws {
-        let json = #"{"data": {"nodes": [{"id": "PR_1", "additions": 120, "deletions": 4}, null]}}"#
-        let stats = try DiffStatsResponse.decode(Data(json.utf8)).stats
-        #expect(stats == ["PR_1": DiffStat(additions: 120, deletions: 4)])
-        #expect(Queries.diffStats(["PR_1", "PR_2"]).contains(#"nodes(ids: ["PR_1", "PR_2"])"#))
+    @Test func decodesDetailsSkippingUnresolved() throws {
+        let json = #"{"data": {"nodes": [{"id": "PR_1", "additions": 120, "deletions": 4, "headRefName": "fix/login"}, null]}}"#
+        let details = try DetailsResponse.decode(Data(json.utf8)).details
+        #expect(details == ["PR_1": PRDetails(diff: DiffStat(additions: 120, deletions: 4), branch: "fix/login")])
+        #expect(Queries.details(["PR_1", "PR_2"]).contains(#"nodes(ids: ["PR_1", "PR_2"])"#))
+    }
+
+    @Test func checksLinkAndCheckoutCommand() {
+        let p = pr("A", number: 1594)
+        #expect(p.checksURL.absoluteString == "https://github.com/o/repo/pull/1594/checks")
+        #expect(p.checkoutCommand == "gh pr checkout 1594")
     }
 
     @Test func decodesMergeStatus() throws {

@@ -66,7 +66,7 @@ public struct Commit: Codable, Sendable, Hashable {
     }
 }
 
-/// Lines added and removed across a PR. Fetched separately from the poll (`Queries.diffStats`).
+/// Lines added and removed across a PR.
 public struct DiffStat: Sendable, Hashable {
     public var additions: Int
     public var deletions: Int
@@ -74,6 +74,18 @@ public struct DiffStat: Sendable, Hashable {
     public init(additions: Int, deletions: Int) {
         self.additions = additions
         self.deletions = deletions
+    }
+}
+
+/// What a PR's row needs beyond the poll, fetched separately (`Queries.details`).
+public struct PRDetails: Sendable, Hashable {
+    public var diff: DiffStat
+    /// The head branch's name.
+    public var branch: String
+
+    public init(diff: DiffStat, branch: String) {
+        self.diff = diff
+        self.branch = branch
     }
 }
 

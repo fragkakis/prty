@@ -100,6 +100,8 @@ struct MenuContent: View {
         let shown = filtering ? all.filtered(panel.query) : all
         let rows = shown.rows(panel.tab, collapsed: filtering ? [] : panel.collapsed, snoozedOpen: filtering || panel.snoozedOpen.contains(panel.tab))
         let selected = selection(in: rows)
+        // Everything in the tab, for the menu's Mark all as read.
+        let tabPRs = shown.rows(panel.tab, collapsed: [], snoozedOpen: true).map(\.id)
 
         VStack(spacing: 0) {
             filterField(rows: rows, selected: selected)
@@ -133,6 +135,7 @@ struct MenuContent: View {
                 ScrollView {
                     list(panel.tab, shown, expandAll: filtering)
                         .environment(\.selectedRow, selected?.id)
+                        .environment(\.tabPRs, tabPRs)
                 }
                 .onChange(of: panel.scrollTarget) { _, id in
                     if let id { proxy.scrollTo(id) }
@@ -291,21 +294,10 @@ struct MenuContent: View {
                           snoozedUntil: store.snoozed[item.pr.id]) {
                         open(item.pr)
                     }
-                    .contextMenu { snoozeMenu(item.pr) }
                     .padding(.leading, 16)
                     .id(item.pr.id)
                 }
             }
-        }
-    }
-
-    @ViewBuilder private func snoozeMenu(_ pr: PullRequest) -> some View {
-        if store.snoozed[pr.id] != nil {
-            Button("Unsnooze") { store.unsnooze(pr.id) }
-        } else {
-            Button("Snooze until new activity") { store.snooze(pr, until: Snooze.untilActivity) }
-            Button("Snooze until tomorrow morning") { store.snooze(pr, until: Snooze.tomorrowMorning(after: Date())) }
-            Button("Snooze until next week") { store.snooze(pr, until: Snooze.nextWeek(after: Date())) }
         }
     }
 
@@ -383,6 +375,41 @@ struct MenuContent: View {
             .foregroundStyle(.secondary)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 24)
+    }
+}
+
+/// A PR row's right-click menu.
+private struct RowMenu: View {
+    let pr: PullRequest
+    @Environment(\.tabPRs) private var tabPRs
+    private let store = PRStore.shared
+
+    var body: some View {
+        Button("Open checks") { NSWorkspace.shared.open(pr.checksURL) }
+        Divider()
+        if store.unread.contains(pr.id) {
+            Button("Mark as read") { store.markRead(pr.id) }
+        } else {
+            Button("Mark as unread") { store.markUnread(pr.id) }
+        }
+        let unreadInTab = tabPRs.filter(store.unread.contains)
+        Button("Mark all in this tab as read") { store.markRead(unreadInTab) }
+            .disabled(unreadInTab.isEmpty)
+        Divider()
+        if store.snoozed[pr.id] != nil {
+            Button("Unsnooze") { store.unsnooze(pr.id) }
+        } else {
+            Button("Snooze until new activity") { store.snooze(pr, until: Snooze.untilActivity) }
+            Button("Snooze until tomorrow morning") { store.snooze(pr, until: Snooze.tomorrowMorning(after: Date())) }
+            Button("Snooze until next week") { store.snooze(pr, until: Snooze.nextWeek(after: Date())) }
+        }
+        Divider()
+        Button("Copy link") { NSPasteboard.general.copy(pr.url.absoluteString) }
+        // Nil until the PR's details are fetched, right after it first shows up.
+        let branch = store.branches[pr.id]
+        Button("Copy branch name") { if let branch { NSPasteboard.general.copy(branch) } }
+            .disabled(branch == nil)
+        Button("Copy “\(pr.checkoutCommand)”") { NSPasteboard.general.copy(pr.checkoutCommand) }
     }
 }
 
@@ -496,6 +523,9 @@ private struct PRRow: View {
             .background(background, in: RoundedRectangle(cornerRadius: 6))
         }
         .buttonStyle(.plain)
+        // On the button itself: outside PRRow, VoiceOver's Show Menu opened
+        // the menu of the repo group's first row.
+        .contextMenu { RowMenu(pr: pr) }
         .onHover { panel.hover(pr.id, inside: $0) }
         .help(pr.title)
     }
@@ -583,6 +613,25 @@ extension EnvironmentValues {
 
 private struct SelectedRowKey: EnvironmentKey {
     static let defaultValue: String? = nil
+}
+
+extension EnvironmentValues {
+    /// The ids of every PR in the panel's tab, collapsed or snoozed ones included.
+    var tabPRs: [String] {
+        get { self[TabPRsKey.self] }
+        set { self[TabPRsKey.self] = newValue }
+    }
+}
+
+private struct TabPRsKey: EnvironmentKey {
+    static let defaultValue: [String] = []
+}
+
+extension NSPasteboard {
+    func copy(_ string: String) {
+        clearContents()
+        setString(string, forType: .string)
+    }
 }
 
 /// Gives `PanelState` the panel's window, and tells it when the panel opens.

@@ -14,10 +14,11 @@ A macOS menu-bar app that lists the GitHub pull requests waiting on you, and not
 - **To review:** PRs requesting your review (marked *You*) or your teams' review, newest first, then open PRs you've already reviewed. Team requests idle for 30+ days are hidden.
 - **My PRs:** your open PRs with their review state (approved, changes requested, awaiting review).
 - **Grouped by repo:** click a repo to collapse it; remembered across launches.
+- **Right-click a PR** to open its checks, mark it read or unread (or everything in the tab read), snooze it, or copy its link, branch name or `gh pr checkout` command.
 - **Snooze:** right-click a PR to hide it until there's new activity, tomorrow morning or next week. It waits, dimmed, in a *Snoozed* section at the bottom of its tab and leaves the badge. Anything that would give it a blue dot brings it back early, as do failing checks on your own PRs.
 - **Filter:** type to filter by number (`#123`), title, repo, author or reviewer. Every word must match.
 - **Keyboard:** ⌃⌥P opens the panel from any app with the filter ready to type in (change or turn off the shortcut in Settings). ↑ and ↓ pick a PR, ↩ opens it (while filtering, the first match without picking), ⌘1 and ⌘2 switch tabs, and Esc clears the filter, then closes.
-- **Unread dots:** a blue dot marks new activity you haven't opened. It clears when you open the PR from the panel or its notification, or read it on GitHub (synced through your GitHub notifications). Activity GitHub doesn't notify you about, such as pushes, only clears from PRty Time.
+- **Unread dots:** a blue dot marks new activity you haven't opened. It clears when you open the PR from the panel or its notification, mark it read (right-click), or read it on GitHub (synced through your GitHub notifications). Activity GitHub doesn't notify you about, such as pushes, only clears from PRty Time.
 - **At a glance:** each row shows the author's avatar and the lines added and removed (the counts can be turned off in Settings).
 - **Checks and conflicts** (off by default, turn on in Settings): your PRs show whether their checks passed, failed or are still running, and a *Conflicts* tag when they can't merge cleanly.
 - **Badge:** the menu-bar icon shows how many PRs await your review.
@@ -76,7 +77,7 @@ make zip       # universal (Apple Silicon + Intel) build, zipped to .build/PRty-
 
 **Releasing:** bump `CFBundleShortVersionString` and `CFBundleVersion` in `Resources/Info.plist`, then push a tag (`git tag v1.2.3 && git push origin v1.2.3`) or publish a release with a new `v*` tag on github.com. The Release workflow builds the zip on GitHub's macOS runners, attaches it to the release (adding the install notes from `.github/release-notes.md` when it creates the release), and updates the cask in [fragkakis/homebrew-tap](https://github.com/fragkakis/homebrew-tap) using the `TAP_DEPLOY_KEY` secret.
 
-- **API usage:** one GraphQL request per poll (every 2 min by default), about 20 of the 5,000 points GitHub allows per hour, plus 1-point lookups for the line counts of new or updated PRs, and when a PR drops off your lists (to tell merged from closed). With checks turned on, another 1-point lookup per poll for your PRs. While any dot is showing, one REST request to your GitHub notifications checks what you've read there. Once a day, one REST request looks for a newer release. Polling pauses when the rate limit runs low.
+- **API usage:** one GraphQL request per poll (every 2 min by default), about 20 of the 5,000 points GitHub allows per hour, plus 1-point lookups for the line counts and branch names of new or updated PRs, and when a PR drops off your lists (to tell merged from closed). With checks turned on, another 1-point lookup per poll for your PRs. While any dot is showing, one REST request to your GitHub notifications checks what you've read there. Once a day, one REST request looks for a newer release. Polling pauses when the rate limit runs low.
 - **State:** `~/Library/Application Support/Prty/state.json` holds what was already seen, so restarts don't re-notify.
 - **Debug:** `defaults write com.fragkakis.prty notifySelf -bool YES` counts your own comments as activity, so you can test notifications on your own PR.
 

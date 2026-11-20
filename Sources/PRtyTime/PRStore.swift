@@ -15,6 +15,8 @@ final class PRStore {
     private(set) var isRefreshing = false
     /// Line counts of the PRs on show, by PR id.
     private(set) var diffStats: [String: DiffStat] = [:]
+    /// Head branches of the PRs on show, by PR id.
+    private(set) var branches: [String: String] = [:]
     /// Checks and conflicts of your PRs, by PR id. Empty unless `Prefs.showChecks` is on.
     private(set) var mergeStatus: [String: MergeStatus] = [:]
     /// Snoozed PRs by id, with when they come back on their own (see `Snooze`).
@@ -39,8 +41,8 @@ final class PRStore {
     @ObservationIgnored private let notifier = Notifier()
     @ObservationIgnored private var loop: Task<Void, Never>?
     @ObservationIgnored private var failures = 0
-    /// The `updatedAt` each line count was fetched at, so only changed PRs are fetched again.
-    @ObservationIgnored private var diffStatsAt: [String: Date] = [:]
+    /// The `updatedAt` each PR's details were fetched at, so only changed PRs are fetched again.
+    @ObservationIgnored private var detailsAt: [String: Date] = [:]
     @ObservationIgnored private let log = Logger(subsystem: "com.fragkakis.prty", category: "poll")
 
     func start() {
@@ -91,8 +93,20 @@ final class PRStore {
     }
 
     func markRead(_ id: String) {
-        guard unread.remove(id) != nil else { return }
-        snapshot?.unread = unread
+        markRead([id])
+    }
+
+    func markRead(_ ids: some Sequence<String>) {
+        let read = unread.intersection(ids)
+        guard !read.isEmpty else { return }
+        unread.subtract(read)
+        snapshot?.markRead(read)
+        persist()
+    }
+
+    func markUnread(_ id: String) {
+        guard unread.insert(id).inserted else { return }
+        snapshot?.markUnread(id, at: Date())
         persist()
     }
 
@@ -172,11 +186,11 @@ final class PRStore {
             persist()
             diff.notifications.forEach(notifier.post)
             let shown = MenuSections(buckets: data.buckets, staleDays: settings.staleDays, hideBots: settings.ignoreBots)
-            let diffsFetched = await refreshDiffStats(for: shown.toReview.map(\.pr) + shown.reviewed + shown.mine)
+            let detailsFetched = await refreshDetails(for: shown.toReview.map(\.pr) + shown.reviewed + shown.mine)
 
             let duration = String(format: "%.1f", Date().timeIntervalSince(started))
             await checkForUpdate()
-            log.notice("poll ok: requests=\(result.requests) closed=\(data.closed.count) readOnGitHub=\(readOnGitHub) cost=\(result.cost) remaining=\(result.rateLimit?.remaining ?? -1) diffs=\(diffsFetched) checks=\(data.mergeStatus?.count ?? -1) duration=\(duration, privacy: .public)s notifications=\(diff.notifications.count)")
+            log.notice("poll ok: requests=\(result.requests) closed=\(data.closed.count) readOnGitHub=\(readOnGitHub) cost=\(result.cost) remaining=\(result.rateLimit?.remaining ?? -1) details=\(detailsFetched) checks=\(data.mergeStatus?.count ?? -1) duration=\(duration, privacy: .public)s notifications=\(diff.notifications.count)")
 
             if let limit = result.rateLimit, limit.remaining < 200 {
                 warning = "Rate limit low (\(limit.remaining) left), pausing until \(limit.resetAt.formatted(date: .omitted, time: .shortened))"
@@ -192,21 +206,27 @@ final class PRStore {
         }
     }
 
-    /// Fetches line counts for PRs that are new or updated since their last fetch,
-    /// and drops the ones no longer shown. Returns how many were requested.
-    private func refreshDiffStats(for prs: [PullRequest]) async -> Int {
+    /// Fetches line counts and branches for PRs that are new or updated since
+    /// their last fetch, and drops the ones no longer shown. Fetched with line
+    /// counts turned off too, for the menu's Copy branch name. Returns how many
+    /// were requested.
+    private func refreshDetails(for prs: [PullRequest]) async -> Int {
         let updatedAt = Dictionary(prs.map { ($0.id, $0.updatedAt) }, uniquingKeysWith: { first, _ in first })
-        diffStatsAt = diffStatsAt.filter { updatedAt[$0.key] != nil }
-        let kept = diffStats.filter { updatedAt[$0.key] != nil }
-        if kept.count != diffStats.count { diffStats = kept } // avoid redrawing the panel every poll
-        guard UserDefaults.standard.bool(forKey: Prefs.showLineCounts) else { return 0 }
-        let stale = updatedAt.filter { diffStatsAt[$0.key] != $0.value }.map(\.key)
+        detailsAt = detailsAt.filter { updatedAt[$0.key] != nil }
+        // Only assigned on change, to avoid redrawing the panel every poll.
+        let keptStats = diffStats.filter { updatedAt[$0.key] != nil }
+        if keptStats.count != diffStats.count { diffStats = keptStats }
+        let keptBranches = branches.filter { updatedAt[$0.key] != nil }
+        if keptBranches.count != branches.count { branches = keptBranches }
+        let stale = updatedAt.filter { detailsAt[$0.key] != $0.value }.map(\.key)
         guard !stale.isEmpty else { return 0 }
         do {
-            diffStats.merge(try await client.diffStats(stale)) { $1 }
-            for id in stale { diffStatsAt[id] = updatedAt[id] }
+            let fetched = try await client.details(stale)
+            diffStats.merge(fetched.mapValues(\.diff)) { $1 }
+            branches.merge(fetched.mapValues(\.branch)) { $1 }
+            for id in stale { detailsAt[id] = updatedAt[id] }
         } catch {
-            log.error("fetching line counts for \(stale.count) PRs failed: \(error.localizedDescription, privacy: .public)")
+            log.error("fetching details for \(stale.count) PRs failed: \(error.localizedDescription, privacy: .public)")
         }
         return stale.count
     }

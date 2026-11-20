@@ -30,8 +30,6 @@ struct SettingsView: View {
             }
             Section("Panel") {
                 Toggle("Show lines added and removed", isOn: $showLineCounts)
-                    // Fetch the counts now instead of at the next poll.
-                    .onChange(of: showLineCounts) { _, on in if on { PRStore.shared.refreshNow() } }
                 Toggle("Show checks and merge conflicts on my PRs", isOn: $showChecks)
                     .onChange(of: showChecks) { _, on in if on { PRStore.shared.refreshNow() } }
             }

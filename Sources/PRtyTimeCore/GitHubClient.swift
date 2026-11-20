@@ -148,16 +148,16 @@ public actor GitHubClient {
         return closed
     }
 
-    /// Line counts by PR id.
-    public func diffStats(_ ids: [String]) async throws -> [String: DiffStat] {
-        var stats: [String: DiffStat] = [:]
+    /// Line counts and head branches by PR id.
+    public func details(_ ids: [String]) async throws -> [String: PRDetails] {
+        var details: [String: PRDetails] = [:]
         // nodes(ids:) takes at most 100.
         for start in stride(from: 0, to: ids.count, by: 100) {
-            let decoded = try DiffStatsResponse.decode(try await post(Queries.diffStats(Array(ids[start..<min(start + 100, ids.count)]))))
+            let decoded = try DetailsResponse.decode(try await post(Queries.details(Array(ids[start..<min(start + 100, ids.count)]))))
             guard decoded.data != nil else { throw GitHubError.graphQL(decoded.errors?.map(\.message) ?? []) }
-            stats.merge(decoded.stats) { $1 }
+            details.merge(decoded.details) { $1 }
         }
-        return stats
+        return details
     }
 
     /// Checks and merge conflicts by PR id.

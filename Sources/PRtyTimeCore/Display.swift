@@ -144,6 +144,12 @@ extension PullRequest {
         return terms.allSatisfy { text.contains($0) }
     }
 
+    /// The PR's Checks tab on GitHub.
+    public var checksURL: URL { url.appendingPathComponent("checks") }
+
+    /// Checks the PR out, run in a clone of its repo.
+    public var checkoutCommand: String { "gh pr checkout \(number)" }
+
     /// Time since the last update: "now", "5m", "3h", "4d", "6w".
     public func age(now: Date = Date()) -> String {
         let seconds = max(0, now.timeIntervalSince(updatedAt))

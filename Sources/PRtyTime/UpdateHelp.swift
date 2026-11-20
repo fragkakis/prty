@@ -17,8 +17,7 @@ final class UpdateHelp {
     private(set) var copied = false
 
     func copyBrewCommand() {
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(Self.brewCommand, forType: .string)
+        NSPasteboard.general.copy(Self.brewCommand)
         copied = true
         Task {
             try? await Task.sleep(for: .seconds(2))

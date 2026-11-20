@@ -31,6 +31,35 @@ import Testing
         #expect(s.unreadOnGitHub.isEmpty)
     }
 
+    @Test func markingReadClearsEverythingAboutTheDot() {
+        var s = snapshot(unread: ["A": earlier, "B": earlier], onGitHub: ["A"])
+        s.markRead(["A", "C"])
+        #expect(s.unread == ["B"])
+        #expect(s.unreadSince == ["B": earlier])
+        #expect(s.unreadOnGitHub.isEmpty)
+    }
+
+    @Test func aDotMarkedByHandOutlivesAnEarlierReadOnGitHub() {
+        var s = snapshot(unread: [:])
+        s.markUnread("A", at: now)
+        s.markUnread("B", at: now)
+        let inbox: [String: InboxThread] = [
+            "o/repo#1": InboxThread(unread: false, lastReadAt: earlier),
+            "o/repo#2": InboxThread(unread: false, lastReadAt: now.addingTimeInterval(60)),
+        ]
+        #expect(s.syncRead(with: inbox, prs: prs) == 1)
+        #expect(s.unread == ["A"])
+        #expect(s.inboxSince == now)
+    }
+
+    @Test func aDotMarkedByHandSurvivesThePoll() {
+        var s = ActivityDiff.run(previous: nil, poll: poll([.direct: [pr("A")]]), settings: DiffSettings(now: now)).snapshot
+        s.markUnread("A", at: now)
+        let next = ActivityDiff.run(previous: s, poll: poll([.direct: [pr("A")]]), settings: DiffSettings(now: now))
+        #expect(next.snapshot.unread == ["A"])
+        #expect(next.notifications.isEmpty)
+    }
+
     @Test func inboxSinceIsTheOldestDot() {
         #expect(snapshot(unread: ["A": earlier, "B": now]).inboxSince == earlier)
         #expect(Snapshot().inboxSince == nil)

@@ -20,6 +20,23 @@ extension Snapshot {
     /// How far back GitHub notifications need checking; nil when nothing is unread.
     public var inboxSince: Date? { unread.compactMap { unreadSince[$0] }.min() }
 
+    /// Clears the dots of `ids`, as opening them from the panel does.
+    public mutating func markRead(_ ids: some Sequence<String>) {
+        for id in ids {
+            unread.remove(id)
+            unreadSince[id] = nil
+            unreadOnGitHub.remove(id)
+        }
+    }
+
+    /// Puts a dot on `id` by hand at `date`. Like one from activity, it clears
+    /// when the PR is opened, or read on GitHub after `date`.
+    public mutating func markUnread(_ id: String, at date: Date) {
+        unread.insert(id)
+        unreadSince[id] = date
+        unreadOnGitHub.remove(id)
+    }
+
     /// Clears the dots of PRs read on GitHub after their activity. Returns how many it cleared.
     @discardableResult
     public mutating func syncRead(with inbox: [String: InboxThread], prs: [PullRequest]) -> Int {

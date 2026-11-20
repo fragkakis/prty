@@ -161,12 +161,13 @@ struct StatesResponse: Decodable, Sendable {
     }
 }
 
-/// Decoded body of a `Queries.diffStats` request.
-struct DiffStatsResponse: Decodable, Sendable {
+/// Decoded body of a `Queries.details` request.
+struct DetailsResponse: Decodable, Sendable {
     struct Node: Decodable, Sendable {
         var id: String
         var additions: Int
         var deletions: Int
+        var headRefName: String
     }
 
     struct Data: Decodable, Sendable {
@@ -177,13 +178,15 @@ struct DiffStatsResponse: Decodable, Sendable {
     var data: Data?
     var errors: [PollResponse.GraphQLError]?
 
-    static func decode(_ body: Foundation.Data) throws -> DiffStatsResponse {
-        try JSONDecoder().decode(DiffStatsResponse.self, from: body)
+    static func decode(_ body: Foundation.Data) throws -> DetailsResponse {
+        try JSONDecoder().decode(DetailsResponse.self, from: body)
     }
 
-    var stats: [String: DiffStat] {
+    var details: [String: PRDetails] {
         let nodes = (data?.nodes ?? []).compactMap { $0 }
-        return Dictionary(nodes.map { ($0.id, DiffStat(additions: $0.additions, deletions: $0.deletions)) }, uniquingKeysWith: { $1 })
+        return Dictionary(nodes.map {
+            ($0.id, PRDetails(diff: DiffStat(additions: $0.additions, deletions: $0.deletions), branch: $0.headRefName))
+        }, uniquingKeysWith: { $1 })
     }
 }
 
